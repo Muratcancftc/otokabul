@@ -51,6 +51,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     if (state == AppLifecycleState.resumed) {
       _refreshStatus();
     }
+    // Uygulama tamamen kapatıldıysa native taraf servisi durdurur; UI senkronu
+    if (state == AppLifecycleState.detached) {
+      _refreshStatus();
+    }
   }
 
   Future<void> _loadSettings() async {
@@ -249,6 +253,22 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             ],
             if (_serviceRunning) ...[
               const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.blue.shade300),
+                ),
+                child: Text(
+                  'Arka planda çalışır (Ana ekran / BiTaksi). '
+                  'Durdurmak için DURDUR veya uygulamayı kapatın.',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Colors.blue.shade900,
+                      ),
+                ),
+              ),
+              const SizedBox(height: 8),
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(

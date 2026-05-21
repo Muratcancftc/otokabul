@@ -143,6 +143,17 @@ class MainActivity : FlutterActivity() {
         super.onPause()
     }
 
+    /**
+     * Ana ekran tuşu → isFinishing false → servis çalışmaya devam (arka plan).
+     * Geri / son görevden silme → isFinishing true → servisi durdur.
+     */
+    override fun onDestroy() {
+        if (isFinishing && OtoKabulPrefs.isServiceRunning(applicationContext)) {
+            ForegroundService.stop(applicationContext)
+        }
+        super.onDestroy()
+    }
+
     private fun isIgnoringBatteryOptimizations(): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return true
         val pm = getSystemService(Context.POWER_SERVICE) as PowerManager

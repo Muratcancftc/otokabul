@@ -21,7 +21,8 @@ import androidx.core.app.NotificationCompat
 
 /**
  * Uygulamayı arka planda canlı tutar (Samsung dahil).
- * startForeground onCreate'de; PARTIAL_WAKE_LOCK; görev kapatılınca yeniden başlar.
+ * startForeground onCreate'de; PARTIAL_WAKE_LOCK.
+ * Arka planda çalışır; yalnızca DURDUR veya uygulama tamamen kapatılınca durur.
  */
 class ForegroundService : Service() {
 
@@ -151,15 +152,18 @@ class ForegroundService : Service() {
         return START_STICKY
     }
 
+    /**
+     * Uygulama son görev listesinden silinince servisi yeniden başlatma —
+     * kullanıcı "kapattım" sanıyordu ama servis çalışmaya devam ediyordu.
+     * Arka plan (Ana ekran tuşu) için servis zaten ayakta kalır.
+     */
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
-        if (stopRequested || !OtoKabulPrefs.isServiceRunning(applicationContext)) return
-        val restart = Intent(applicationContext, ForegroundService::class.java)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            applicationContext.startForegroundService(restart)
-        } else {
-            applicationContext.startService(restart)
-        }
+        if (!OtoKabulPrefs.isServiceRunning(applicationContext)) return
+        stopRequested = true
+        OtoKabulPrefs.setServiceRunning(applicationContext, false)
+        running = false
+        stopSelf()
     }
 
     override fun onDestroy() {
