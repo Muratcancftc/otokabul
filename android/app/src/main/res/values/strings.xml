@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">OtoKabul</string>
+    <string name="accessibility_service_description">BiTaksi tekliflerinde yolculuk mesafesine (2. km, kazanç) göre otomatik kabul eder.</string>
+    <string name="notification_channel_name">OtoKabul Servisi</string>
+    <string name="notification_channel_desc">Arka planda otomatik kabul servisi</string>
+    <string name="notification_title">OtoKabul Aktif 🚕</string>
+    <string name="notification_text">BiTaksi teklifleri izleniyor</string>
+    <string name="notification_recovering">Erişilebilirlik yeniden başlatılıyor…</string>
+    <string name="notification_recover_failed">Erişilebilirlik bağlanamadı — tekrar denenecek</string>
+    <string name="notification_accessibility_off">Erişilebilirlik kapalı — Ayarlardan açın</string>
+    <string name="notification_alert_channel_name">OtoKabul Uyarılar</string>
+    <string name="notification_alert_channel_desc">Erişilebilirlik ve servis uyarıları</string>
+    <string name="notification_alert_title">OtoKabul uyarı</string>
+    <string name="notification_screen_off_title">Ekran kapalı!</string>
+    <string name="notification_screen_off">Ekranı açık tutun! Kapalıyken BiTaksi teklifleri okunamaz.</string>
+    <string name="notification_screen_off_short">Ekranı açık tutun!</string>
+</resources>
