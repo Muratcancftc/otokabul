@@ -1,9 +1,7 @@
 package com.otokabul
 
-import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.net.Uri
 import android.os.Build
 import android.os.PowerManager
@@ -22,29 +20,10 @@ class MainActivity : FlutterActivity() {
 
     private var methodChannel: MethodChannel? = null
 
-    private val logReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent?.action != AutoAcceptAccessibilityService.LOG_ACTION) return
-            val km = intent.getDoubleExtra("km", 0.0)
-            val accepted = intent.getBooleanExtra("accepted", false)
-            val minKm = intent.getDoubleExtra("minKm", OtoKabulPrefs.DEFAULT_MIN_KM)
-            val time = intent.getStringExtra("time") ?: ""
-
-            methodChannel?.invokeMethod(
-                "onLog",
-                mapOf(
-                    "km" to km,
-                    "accepted" to accepted,
-                    "minKm" to minKm,
-                    "time" to time,
-                ),
-            )
-        }
-    }
-
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         methodChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
+        TripLogRelay.methodChannel = methodChannel
         methodChannel?.setMethodCallHandler { call, result ->
             when (call.method) {
                 "start" -> {
@@ -81,6 +60,10 @@ class MainActivity : FlutterActivity() {
                 }
                 "isAccessibilityEnabled" -> {
                     result.success(AccessibilityMonitor.isHealthy(applicationContext))
+                }
+                "getRecentLogs" -> {
+                    val entries = TripLogStore.loadAll(applicationContext)
+                    result.success(TripLogStore.toMaps(entries))
                 }
                 else -> result.notImplemented()
             }
@@ -124,22 +107,11 @@ class MainActivity : FlutterActivity() {
         if (OtoKabulPrefs.isServiceRunning(applicationContext)) {
             window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         }
-        val filter = IntentFilter(AutoAcceptAccessibilityService.LOG_ACTION)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(logReceiver, filter, RECEIVER_NOT_EXPORTED)
-        } else {
-            @Suppress("DEPRECATION")
-            registerReceiver(logReceiver, filter)
-        }
+        TripLogRelay.methodChannel = methodChannel
     }
 
     override fun onPause() {
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        try {
-            unregisterReceiver(logReceiver)
-        } catch (_: IllegalArgumentException) {
-            // Zaten kayıtlı değilse yoksay
-        }
         super.onPause()
     }
 
@@ -148,8 +120,11 @@ class MainActivity : FlutterActivity() {
      * Geri / son görevden silme → isFinishing true → servisi durdur.
      */
     override fun onDestroy() {
-        if (isFinishing && OtoKabulPrefs.isServiceRunning(applicationContext)) {
-            ForegroundService.stop(applicationContext)
+        if (isFinishing) {
+            TripLogRelay.methodChannel = null
+            if (OtoKabulPrefs.isServiceRunning(applicationContext)) {
+                ForegroundService.stop(applicationContext)
+            }
         }
         super.onDestroy()
     }

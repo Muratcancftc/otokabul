@@ -36,6 +36,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _maybeRequestBatteryExemption();
+      _syncRecentLogs();
     });
   }
 
@@ -50,6 +51,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _refreshStatus();
+      _syncRecentLogs();
     }
     // Uygulama tamamen kapatıldıysa native taraf servisi durdurur; UI senkronu
     if (state == AppLifecycleState.detached) {
@@ -132,21 +134,54 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
 
+  Future<void> _syncRecentLogs() async {
+    try {
+      final raw =
+          await _channel.invokeMethod<List<dynamic>>('getRecentLogs') ?? [];
+      if (!mounted) return;
+      setState(() {
+        _logs
+          ..clear()
+          ..addAll(
+            raw.map((e) {
+              final m = e as Map<dynamic, dynamic>;
+              return _LogEntry(
+                time: m['time'] as String? ?? '',
+                km: (m['km'] as num?)?.toDouble() ?? 0,
+                accepted: m['accepted'] as bool? ?? false,
+                minKm: (m['minKm'] as num?)?.toDouble() ?? _minKm,
+                reason: m['reason'] as String? ?? '',
+              );
+            }),
+          );
+      });
+    } catch (_) {}
+  }
+
+  void _addLogEntry(_LogEntry entry) {
+    if (!mounted) return;
+    setState(() {
+      final dup = _logs.any(
+        (l) => l.time == entry.time && l.km == entry.km && l.reason == entry.reason,
+      );
+      if (dup) return;
+      _logs.insert(0, entry);
+      if (_logs.length > 20) _logs.removeLast();
+    });
+  }
+
   Future<dynamic> _onNativeCall(MethodCall call) async {
     if (call.method == 'onLog') {
       final args = call.arguments as Map<dynamic, dynamic>;
-      final entry = _LogEntry(
-        time: args['time'] as String? ?? '',
-        km: (args['km'] as num?)?.toDouble() ?? 0,
-        accepted: args['accepted'] as bool? ?? false,
-        minKm: (args['minKm'] as num?)?.toDouble() ?? _minKm,
+      _addLogEntry(
+        _LogEntry(
+          time: args['time'] as String? ?? '',
+          km: (args['km'] as num?)?.toDouble() ?? 0,
+          accepted: args['accepted'] as bool? ?? false,
+          minKm: (args['minKm'] as num?)?.toDouble() ?? _minKm,
+          reason: args['reason'] as String? ?? '',
+        ),
       );
-      if (mounted) {
-        setState(() {
-          _logs.insert(0, entry);
-          if (_logs.length > 20) _logs.removeLast();
-        });
-      }
     }
   }
 
@@ -196,8 +231,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               style: Theme.of(context).textTheme.titleMedium,
             ),
             Text(
-              'Karar: "8 dk • … km" satırındaki yolculuk km ≥ seçtiğiniz min km. '
-              'Üstteki "7 dk" satırı sayılmaz. Sadece teklif kartında Kabul et.',
+              'Karar: "8 dk • … km" satırı ≥ min km. İlk test için min km\'yi 2–3 yapın '
+              '(5 km çoğu teklifi bilerek atlar). Loglar arka planda da kaydedilir.',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: Colors.grey.shade600,
                   ),
@@ -263,7 +298,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 ),
                 child: Text(
                   'Arka planda çalışır (Ana ekran / BiTaksi). '
-                  'Durdurmak için DURDUR veya uygulamayı kapatın.',
+                  'OtoKabul\'ü görev listesinden silseniz bile servis çalışır. '
+                  'Durdurmak için DURDUR.',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: Colors.blue.shade900,
                       ),
@@ -336,16 +372,24 @@ class _LogEntry {
   final double km;
   final bool accepted;
   final double minKm;
+  final String reason;
 
   _LogEntry({
     required this.time,
     required this.km,
     required this.accepted,
     required this.minKm,
+    this.reason = '',
   });
 
   String format(String Function(double) fmtKm) {
     final kmStr = fmtKm(km);
+    if (reason == 'click_failed') {
+      return '⚠️ $time - $kmStr km - BUTONA BASILAMADI (min: ${minKm.toStringAsFixed(0)}km)';
+    }
+    if (reason == 'no_km') {
+      return '⚠️ $time - KM OKUNAMADI — teklif kartı görüldü, erişilebilirlik metni eksik';
+    }
     if (accepted) {
       return '✅ $time - $kmStr km - KABUL EDİLDİ';
     }

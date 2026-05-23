@@ -1,43 +1,49 @@
 package com.otokabul
 
 import android.accessibilityservice.AccessibilityService
-import android.content.Intent
 import android.os.Handler
-import android.os.Looper
+import android.os.HandlerThread
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 import java.util.Random
 
 /**
  * BiTaksi yolculuk teklif kartını izler.
  * Karar: alttaki "8 dk • X km" satırındaki km ≥ taksicinin seçtiği min km.
- * Üstteki "7 dk • … km" (alış) ve başka sayfalardaki "Kabul et" yok sayılır.
+ * Ağır iş arka plan thread'inde — ana thread ANR olmaz.
  */
 class AutoAcceptAccessibilityService : AccessibilityService() {
 
     companion object {
         const val BITAKSI_PACKAGE = "com.projectslender"
         const val LOG_ACTION = "com.otokabul.LOG"
+        private const val SCAN_DEBOUNCE_MS = 120L
 
         @Volatile
         var instance: AutoAcceptAccessibilityService? = null
             private set
     }
 
-    private val handler = Handler(Looper.getMainLooper())
     private val random = Random()
+    private var workerThread: HandlerThread? = null
+    private var workerHandler: Handler? = null
     private var isProcessing = false
     private var lastHandledAt = 0L
 
+    private val scanRunnable = Runnable { scanActiveWindow() }
+
     override fun onServiceConnected() {
         super.onServiceConnected()
+        workerThread = HandlerThread("OtoKabulA11y").apply { start() }
+        workerHandler = Handler(workerThread!!.looper)
         instance = this
     }
 
     override fun onDestroy() {
+        workerHandler?.removeCallbacksAndMessages(null)
+        workerThread?.quitSafely()
+        workerThread = null
+        workerHandler = null
         instance = null
         super.onDestroy()
     }
@@ -56,7 +62,21 @@ class AutoAcceptAccessibilityService : AccessibilityService() {
         val packageName = event.packageName?.toString() ?: return
         if (packageName != BITAKSI_PACKAGE) return
 
-        // Aynı popup için tekrar tekrar işlem yapma
+        val handler = workerHandler ?: return
+        val delay = if (eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+            0L
+        } else {
+            SCAN_DEBOUNCE_MS
+        }
+        handler.removeCallbacks(scanRunnable)
+        handler.postDelayed(scanRunnable, delay)
+    }
+
+    override fun onInterrupt() {
+        // Servis kesildiğinde yapılacak bir şey yok
+    }
+
+    private fun scanActiveWindow() {
         val now = System.currentTimeMillis()
         if (OtoKabulLogic.shouldSkipEvent(now, lastHandledAt, isProcessing)) return
 
@@ -68,22 +88,23 @@ class AutoAcceptAccessibilityService : AccessibilityService() {
         }
     }
 
-    override fun onInterrupt() {
-        // Servis kesildiğinde yapılacak bir şey yok
-    }
-
     private fun handlePopup(root: AccessibilityNodeInfo) {
         val allTexts = mutableListOf<String>()
         collectAllTexts(root, allTexts)
         if (!OtoKabulLogic.isTripOfferScreen(allTexts)) return
 
-        val km = OtoKabulLogic.journeyKmFromTexts(allTexts) ?: return
+        val km = OtoKabulLogic.journeyKmFromTexts(allTexts)
         val minKm = OtoKabulPrefs.getMinKm(applicationContext)
+        if (km == null) {
+            sendLog(0.0, TripLogRelay.REASON_NO_KM, minKm)
+            lastHandledAt = System.currentTimeMillis()
+            return
+        }
 
         if (OtoKabulLogic.shouldAccept(km, minKm)) {
             isProcessing = true
             val delayMs = OtoKabulLogic.randomDelayMs(random)
-            handler.postDelayed({
+            workerHandler?.postDelayed({
                 try {
                     val freshRoot = rootInActiveWindow
                     if (freshRoot != null) {
@@ -94,8 +115,13 @@ class AutoAcceptAccessibilityService : AccessibilityService() {
                             val freshKm = OtoKabulLogic.journeyKmFromTexts(freshTexts)
                                 ?: return@postDelayed
                             if (!OtoKabulLogic.shouldAccept(freshKm, minKm)) return@postDelayed
-                            val clicked = clickAcceptButton(freshRoot)
-                            sendLog(freshKm, accepted = clicked, minKm)
+                            val clicked = AcceptClickHelper.tryClickAccept(this, freshRoot)
+                            val reason = if (clicked) {
+                                TripLogRelay.REASON_ACCEPTED
+                            } else {
+                                TripLogRelay.REASON_CLICK_FAILED
+                            }
+                            sendLog(freshKm, reason, minKm)
                         } finally {
                             freshRoot.recycle()
                         }
@@ -106,7 +132,7 @@ class AutoAcceptAccessibilityService : AccessibilityService() {
                 }
             }, delayMs.toLong())
         } else {
-            sendLog(km, accepted = false, minKm)
+            sendLog(km, TripLogRelay.REASON_SKIPPED, minKm)
             lastHandledAt = System.currentTimeMillis()
         }
     }
@@ -121,57 +147,11 @@ class AutoAcceptAccessibilityService : AccessibilityService() {
         }
     }
 
-    /** Tam metni "Kabul et" olan butonu bulur ve tıklar — sadece teklif kartında. */
-    private fun clickAcceptButton(root: AccessibilityNodeInfo): Boolean {
-        val allTexts = mutableListOf<String>()
-        collectAllTexts(root, allTexts)
-        if (!OtoKabulLogic.isTripOfferScreen(allTexts)) return false
-
-        val target = findNodeWithExactText(root, OtoKabulLogic.ACCEPT_BUTTON_TEXT) ?: return false
-        val clickable = findClickableNode(target)
-        return clickable.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-    }
-
-    private fun findNodeWithExactText(
-        node: AccessibilityNodeInfo,
-        exactText: String,
-    ): AccessibilityNodeInfo? {
-        val nodeText = node.text?.toString()?.trim()
-        if (nodeText == exactText) return node
-        val desc = node.contentDescription?.toString()?.trim()
-        if (desc == exactText) return node
-
-        for (i in 0 until node.childCount) {
-            val child = node.getChild(i) ?: continue
-            val found = findNodeWithExactText(child, exactText)
-            child.recycle()
-            if (found != null) return found
-        }
-        return null
-    }
-
-    private fun findClickableNode(node: AccessibilityNodeInfo): AccessibilityNodeInfo {
-        var current: AccessibilityNodeInfo = node
-        while (!current.isClickable && current.parent != null) {
-            val parent = current.parent ?: break
-            if (current !== node) current.recycle()
-            current = parent
-        }
-        return current
-    }
-
-    private fun sendLog(km: Double, accepted: Boolean, minKm: Double) {
+    private fun sendLog(km: Double, reason: String, minKm: Double) {
+        val accepted = reason == TripLogRelay.REASON_ACCEPTED
         if (accepted) {
             AcceptSoundPlayer.playDing(applicationContext)
         }
-        val time = SimpleDateFormat("HH:mm", Locale("tr", "TR")).format(Date())
-        val intent = Intent(LOG_ACTION).apply {
-            setPackage(packageName)
-            putExtra("km", km)
-            putExtra("accepted", accepted)
-            putExtra("minKm", minKm)
-            putExtra("time", time)
-        }
-        sendBroadcast(intent)
+        TripLogRelay.emit(applicationContext, km, accepted, minKm, reason)
     }
 }

@@ -15,4 +15,6 @@
     <string name="notification_screen_off_title">Ekran kapalı!</string>
     <string name="notification_screen_off">Ekranı açık tutun! Kapalıyken BiTaksi teklifleri okunamaz.</string>
     <string name="notification_screen_off_short">Ekranı açık tutun!</string>
+    <string name="notification_click_failed_title">Kabul edilemedi</string>
+    <string name="notification_click_failed_text">%1$s km teklif — min %2$d km (butona basılamadı, BiTaksi ekranını kontrol edin)</string>
 </resources>

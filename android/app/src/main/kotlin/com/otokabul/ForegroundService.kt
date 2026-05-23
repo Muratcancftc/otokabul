@@ -153,17 +153,13 @@ class ForegroundService : Service() {
     }
 
     /**
-     * Uygulama son görev listesinden silinince servisi yeniden başlatma —
-     * kullanıcı "kapattım" sanıyordu ama servis çalışmaya devam ediyordu.
-     * Arka plan (Ana ekran tuşu) için servis zaten ayakta kalır.
+     * Görev listesinden silinse bile servis ayakta kalsın (BiTaksi'ye geçiş).
+     * Durdurmak için uygulamada DURDUR kullanılır.
      */
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
         if (!OtoKabulPrefs.isServiceRunning(applicationContext)) return
-        stopRequested = true
-        OtoKabulPrefs.setServiceRunning(applicationContext, false)
-        running = false
-        stopSelf()
+        start(applicationContext)
     }
 
     override fun onDestroy() {
