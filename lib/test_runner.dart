@@ -189,7 +189,7 @@ class _TestRunnerScreenState extends State<TestRunnerScreen> {
       final allOk = map['allPass'] == true;
       final lines = <String>[
         'Mevcut min km: ${_formatKmSetting(minKm)}',
-        '2. km değeri alınıyor (yolculuk mesafesi, index 1)',
+        '"8 dk • … km" satırından yolculuk km alınıyor',
         '',
       ];
 
@@ -204,10 +204,19 @@ class _TestRunnerScreenState extends State<TestRunnerScreen> {
       check('10,5 km', 10.5);
       check('abc km', null);
 
-      final indexOk = map['trip_index_1'] == true;
+      final journeyOk = map['journey_row_km'] == true;
+      final ignoresPickup = map['ignores_pickup_km'] == true;
       lines.add(
-        '[2.56, 2.24] → 2.24 (index 1) ${indexOk ? '✅' : '❌'}',
+        '8 dk satırı → 2,24 km ${journeyOk ? '✅' : '❌'}',
       );
+      lines.add(
+        '7 dk satırı (2,56) yok sayılıyor ${ignoresPickup ? '✅' : '❌'}',
+      );
+
+      final offerOk = map['trip_offer_screen'] == true;
+      final otherRejected = map['other_screen_rejected'] == true;
+      lines.add('Teklif kartı tanıma ${offerOk ? '✅' : '❌'}');
+      lines.add('Diğer ekran reddi ${otherRejected ? '✅' : '❌'}');
 
       final detail = lines.join('\n');
       if (allOk) {

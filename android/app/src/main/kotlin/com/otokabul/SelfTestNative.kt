@@ -81,15 +81,27 @@ object SelfTestNative {
      */
     fun testKmParse(context: Context): Map<String, Any> {
         val minKm = OtoKabulPrefs.getMinKm(context)
-        val popupKmList = listOf(2.56, 2.24)
+        val offerTexts = listOf(
+            "7 dk • 2,56 km",
+            "8 dk • 2,24 km",
+            "Kabul et",
+            "Toplam kazanç",
+            "₺170 - 215",
+        )
 
         val parse2_56 = OtoKabulLogic.parseKm("2,56 km") == 2.56
         val parse2_56_dot = OtoKabulLogic.parseKm("2.56 km") == 2.56
         val parse10_5 = OtoKabulLogic.parseKm("10,5 km") == 10.5
         val parseAbc = OtoKabulLogic.parseKm("abc km") == null
-        val tripIndex1 = OtoKabulLogic.tripKmFromValues(popupKmList) == 2.24
+        val journeyKm = OtoKabulLogic.journeyKmFromTexts(offerTexts) == 2.24
+        val ignoresPickupRow = OtoKabulLogic.journeyKmFromTexts(offerTexts) != 2.56
+        val tripOfferOk = OtoKabulLogic.isTripOfferScreen(offerTexts)
+        val otherScreenOk = !OtoKabulLogic.isTripOfferScreen(
+            listOf("Kabul et", "Ayarlar"),
+        )
 
-        val allPass = parse2_56 && parse2_56_dot && parse10_5 && parseAbc && tripIndex1
+        val allPass = parse2_56 && parse2_56_dot && parse10_5 && parseAbc &&
+            journeyKm && ignoresPickupRow && tripOfferOk && otherScreenOk
 
         return mapOf(
             "minKm" to minKm,
@@ -98,7 +110,10 @@ object SelfTestNative {
             "2.56 km" to parse2_56_dot,
             "10,5 km" to parse10_5,
             "abc km" to parseAbc,
-            "trip_index_1" to tripIndex1,
+            "journey_row_km" to journeyKm,
+            "ignores_pickup_km" to ignoresPickupRow,
+            "trip_offer_screen" to tripOfferOk,
+            "other_screen_rejected" to otherScreenOk,
         )
     }
 

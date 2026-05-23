@@ -196,7 +196,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               style: Theme.of(context).textTheme.titleMedium,
             ),
             Text(
-              'BiTaksi popup: 2. km yolculuk mesafesi (kazanç) — karar buna göre (1. km alış, kullanılmaz)',
+              'Karar: "8 dk • … km" satırındaki yolculuk km ≥ seçtiğiniz min km. '
+              'Üstteki "7 dk" satırı sayılmaz. Sadece teklif kartında Kabul et.',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: Colors.grey.shade600,
                   ),

@@ -27,12 +27,24 @@ flutter pub get
 flutter run
 ```
 
-Release APK:
+Release APK (macOS — Android SDK + Java 17 gerekir):
 
 ```bash
-flutter build apk --release
+# Proje kökündeyken (oto_kabul içinde; tekrar cd oto_kabul yapma)
+./scripts/build_apk.sh
 # Çıktı: build/app/outputs/flutter-apk/app-release.apk
 ```
+
+İlk kurulum (bir kez):
+
+```bash
+brew install --cask android-commandlinetools openjdk@17
+flutter config --android-sdk /opt/homebrew/share/android-commandlinetools
+```
+
+`JAVA_HOME` Android Studio'ya işaret ediyorsa (`No Android SDK` / Gradle hatası): terminalde `unset JAVA_HOME` veya `export JAVA_HOME=$(/usr/libexec/java_home -v 17)`.
+
+GitHub Actions her `main` push'ta APK üretir (Artifacts).
 
 ## Self-test
 

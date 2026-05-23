@@ -12,17 +12,15 @@ import java.util.Locale
 import java.util.Random
 
 /**
- * BiTaksi sürücü uygulamasındaki yolculuk popup'ını izler.
- * Popup'ta iki km vardır:
- *   1. "2,56 km" → yolcuya uzaklık (alış) — kullanılmaz
- *   2. "2,24 km" → yolculuk mesafesi (kazanç) — karar buna göre (index 1)
+ * BiTaksi yolculuk teklif kartını izler.
+ * Karar: alttaki "8 dk • X km" satırındaki km ≥ taksicinin seçtiği min km.
+ * Üstteki "7 dk • … km" (alış) ve başka sayfalardaki "Kabul et" yok sayılır.
  */
 class AutoAcceptAccessibilityService : AccessibilityService() {
 
     companion object {
         const val BITAKSI_PACKAGE = "com.projectslender"
         const val LOG_ACTION = "com.otokabul.LOG"
-        const val ACCEPT_BUTTON_TEXT = "Kabul et"
 
         @Volatile
         var instance: AutoAcceptAccessibilityService? = null
@@ -75,7 +73,11 @@ class AutoAcceptAccessibilityService : AccessibilityService() {
     }
 
     private fun handlePopup(root: AccessibilityNodeInfo) {
-        val km = findTripKm(root) ?: return
+        val allTexts = mutableListOf<String>()
+        collectAllTexts(root, allTexts)
+        if (!OtoKabulLogic.isTripOfferScreen(allTexts)) return
+
+        val km = OtoKabulLogic.journeyKmFromTexts(allTexts) ?: return
         val minKm = OtoKabulPrefs.getMinKm(applicationContext)
 
         if (OtoKabulLogic.shouldAccept(km, minKm)) {
@@ -86,8 +88,14 @@ class AutoAcceptAccessibilityService : AccessibilityService() {
                     val freshRoot = rootInActiveWindow
                     if (freshRoot != null) {
                         try {
+                            val freshTexts = mutableListOf<String>()
+                            collectAllTexts(freshRoot, freshTexts)
+                            if (!OtoKabulLogic.isTripOfferScreen(freshTexts)) return@postDelayed
+                            val freshKm = OtoKabulLogic.journeyKmFromTexts(freshTexts)
+                                ?: return@postDelayed
+                            if (!OtoKabulLogic.shouldAccept(freshKm, minKm)) return@postDelayed
                             val clicked = clickAcceptButton(freshRoot)
-                            sendLog(km, accepted = clicked, minKm)
+                            sendLog(freshKm, accepted = clicked, minKm)
                         } finally {
                             freshRoot.recycle()
                         }
@@ -103,33 +111,23 @@ class AutoAcceptAccessibilityService : AccessibilityService() {
         }
     }
 
-    /**
-     * Ekrandaki 2. km değerini döndürür (yolculuk mesafesi — kazanç, index 1).
-     */
-    private fun findTripKm(root: AccessibilityNodeInfo): Double? {
-        val allKm = mutableListOf<Double>()
-        collectAllKm(root, allKm)
-        return OtoKabulLogic.tripKmFromValues(allKm)
-    }
-
-    private fun collectAllKm(node: AccessibilityNodeInfo, out: MutableList<Double>) {
-        node.text?.toString()?.let { extractKmValues(it, out) }
-        node.contentDescription?.toString()?.let { extractKmValues(it, out) }
+    private fun collectAllTexts(node: AccessibilityNodeInfo, out: MutableList<String>) {
+        node.text?.toString()?.let { out.add(it) }
+        node.contentDescription?.toString()?.let { out.add(it) }
         for (i in 0 until node.childCount) {
             val child = node.getChild(i) ?: continue
-            collectAllKm(child, out)
+            collectAllTexts(child, out)
             child.recycle()
         }
     }
 
-    /** Tek metinde birden fazla km olabilir (ör. "7 dk • 2,56 km"). */
-    private fun extractKmValues(text: String, out: MutableList<Double>) {
-        out.addAll(OtoKabulLogic.parseAllKmInText(text))
-    }
-
-    /** Tam metni "Kabul et" olan butonu bulur ve tıklar. */
+    /** Tam metni "Kabul et" olan butonu bulur ve tıklar — sadece teklif kartında. */
     private fun clickAcceptButton(root: AccessibilityNodeInfo): Boolean {
-        val target = findNodeWithExactText(root, ACCEPT_BUTTON_TEXT) ?: return false
+        val allTexts = mutableListOf<String>()
+        collectAllTexts(root, allTexts)
+        if (!OtoKabulLogic.isTripOfferScreen(allTexts)) return false
+
+        val target = findNodeWithExactText(root, OtoKabulLogic.ACCEPT_BUTTON_TEXT) ?: return false
         val clickable = findClickableNode(target)
         return clickable.performAction(AccessibilityNodeInfo.ACTION_CLICK)
     }

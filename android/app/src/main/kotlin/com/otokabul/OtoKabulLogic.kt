@@ -10,9 +10,18 @@ object OtoKabulLogic {
     val KM_REGEX: Pattern =
         Pattern.compile("""(\d+)[,.](\d+)\s*km""", Pattern.CASE_INSENSITIVE)
 
+    /** BiTaksi teklif kartı satırı: "7 dk • 2,56 km" / "8 dk • 2,24 km" */
+    val TRIP_ROW_KM_REGEX: Pattern = Pattern.compile(
+        """\d+\s*dk\s*•\s*(\d+)[,.](\d+)\s*km""",
+        Pattern.CASE_INSENSITIVE,
+    )
+
     const val DEBOUNCE_MS = 2500L
     const val DELAY_MIN_MS = 200
     const val DELAY_MAX_MS = 500
+    const val ACCEPT_BUTTON_TEXT = "Kabul et"
+    /** Yolculuk teklif kartındaki kazanç etiketi — başka ekranlardaki "Kabul et" ayırt edilir. */
+    const val TRIP_OFFER_EARNINGS_MARKER = "Toplam kazanç"
 
     /** Metindeki ilk km değerini parse eder. */
     fun parseKm(text: String): Double? {
@@ -36,11 +45,50 @@ object OtoKabulLogic {
         return result
     }
 
+    /** "8 dk • 2,24 km" gibi tek satırdaki km. */
+    fun parseKmFromTripRowLine(text: String): Double? {
+        val matcher = TRIP_ROW_KM_REGEX.matcher(text)
+        if (!matcher.find()) return null
+        val whole = matcher.group(1) ?: return null
+        val fraction = matcher.group(2) ?: return null
+        return "$whole.$fraction".toDoubleOrNull()
+    }
+
+    /** Bir metinde birden fazla "X dk • Y km" satırı olabilir. */
+    fun parseAllKmFromTripRowLines(text: String): List<Double> {
+        val result = mutableListOf<Double>()
+        val matcher = TRIP_ROW_KM_REGEX.matcher(text)
+        while (matcher.find()) {
+            val whole = matcher.group(1) ?: continue
+            val fraction = matcher.group(2) ?: continue
+            val km = "$whole.$fraction".toDoubleOrNull() ?: continue
+            result.add(km)
+        }
+        return result
+    }
+
     /**
-     * Popup'taki km listesinden 2. değer (index 1) — yolculuk mesafesi (kazanç).
-     * BiTaksi sırası: 1. km yolcuya uzaklık, 2. km yolculuk mesafesi.
+     * Alttaki yolculuk satırındaki km — "8 dk • 2,24 km" (2. "dk • km" satırı).
+     * Üstteki "7 dk • 2,56 km" (alış) kullanılmaz.
      */
-    fun tripKmFromValues(allKm: List<Double>): Double? = allKm.getOrNull(1)
+    fun journeyKmFromTexts(allTexts: List<String>): Double? {
+        val rowKms = mutableListOf<Double>()
+        for (text in allTexts) {
+            rowKms.addAll(parseAllKmFromTripRowLines(text))
+        }
+        return rowKms.getOrNull(1)
+    }
+
+    /**
+     * BiTaksi yolculuk teklif kartı mı? Km sayısına bakılmaz.
+     * Başka ekranlardaki "Kabul et" butonları bu kontrolden geçemez.
+     */
+    fun isTripOfferScreen(allTexts: List<String>): Boolean {
+        if (!allTexts.any { it.contains(TRIP_OFFER_EARNINGS_MARKER, ignoreCase = true) }) {
+            return false
+        }
+        return allTexts.any { it.trim() == ACCEPT_BUTTON_TEXT }
+    }
 
     /** Min km ve üzeri → kabul (eşit dahil). Karar yolculuk mesafesine göre. */
     fun shouldAccept(tripKm: Double, minKm: Double): Boolean = tripKm >= minKm
