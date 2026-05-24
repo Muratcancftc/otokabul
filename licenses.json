@@ -18,9 +18,9 @@
     },
     {
       "code": "TKXAJI0Y",
-      "device_id": "",
-      "activated_at": "",
-      "expires_at": "",
+      "device_id": "TEST-APK-CHECK",
+      "activated_at": "2026-05-24",
+      "expires_at": "2026-05-31",
       "active": true,
       "note": ""
     },
