@@ -1,18 +1,34 @@
 {
   "licenses": [
     {
-      "code": "TKXAJI0Y",
+      "code": "TKMNQR7O",
       "device_id": "",
       "activated_at": "",
       "expires_at": "",
+      "active": true,
+      "note": "test"
+    },
+    {
+      "code": "TK1AF656",
+      "device_id": "ac954bc0e726a453",
+      "activated_at": "2026-05-24",
+      "expires_at": "2026-05-31",
+      "active": true,
+      "note": ""
+    },
+    {
+      "code": "TKXAJI0Y",
+      "device_id": "TEST-APK-CHECK",
+      "activated_at": "2026-05-24",
+      "expires_at": "2026-05-31",
       "active": true,
       "note": ""
     },
     {
       "code": "TK6DPBHS",
-      "device_id": "",
-      "activated_at": "",
-      "expires_at": "",
+      "device_id": "ac954bc0e726a453",
+      "activated_at": "2026-05-24",
+      "expires_at": "2026-05-31",
       "active": true,
       "note": ""
     },
