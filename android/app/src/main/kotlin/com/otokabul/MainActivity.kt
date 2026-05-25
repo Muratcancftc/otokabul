@@ -1,7 +1,9 @@
 package com.otokabul
 
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.net.Uri
 import android.os.Build
 import android.os.PowerManager
@@ -19,11 +21,14 @@ class MainActivity : FlutterActivity() {
     }
 
     private var methodChannel: MethodChannel? = null
+    private var licenseRevokeReceiver: BroadcastReceiver? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         methodChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
         TripLogRelay.methodChannel = methodChannel
+        LicenseEventRelay.methodChannel = methodChannel
+        registerLicenseRevokeReceiver()
         methodChannel?.setMethodCallHandler { call, result ->
             when (call.method) {
                 "start" -> {
@@ -65,6 +70,13 @@ class MainActivity : FlutterActivity() {
                     val entries = TripLogStore.loadAll(applicationContext)
                     result.success(TripLogStore.toMaps(entries))
                 }
+                "getDeviceId" -> {
+                    val id = Settings.Secure.getString(
+                        contentResolver,
+                        Settings.Secure.ANDROID_ID,
+                    ) ?: ""
+                    result.success(id)
+                }
                 else -> result.notImplemented()
             }
         }
@@ -94,6 +106,8 @@ class MainActivity : FlutterActivity() {
                             result.success(SelfTestNative.testRandomDelay())
                         "testDoubleTapProtection" ->
                             result.success(SelfTestNative.testDoubleTapProtection())
+                        "testLicenseRemoteRevoke" ->
+                            result.success(SelfTestNative.testLicenseRemoteRevoke(ctx))
                         else -> result.notImplemented()
                     }
                 } catch (e: Exception) {
@@ -102,12 +116,25 @@ class MainActivity : FlutterActivity() {
             }
     }
 
+    private fun registerLicenseRevokeReceiver() {
+        if (licenseRevokeReceiver != null) return
+        licenseRevokeReceiver = LicenseRevokeReceiver()
+        val filter = IntentFilter(LicenseEventRelay.ACTION_LICENSE_REVOKED)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(licenseRevokeReceiver, filter, RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("DEPRECATION")
+            registerReceiver(licenseRevokeReceiver, filter)
+        }
+    }
+
     override fun onResume() {
         super.onResume()
         if (OtoKabulPrefs.isServiceRunning(applicationContext)) {
             window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         }
         TripLogRelay.methodChannel = methodChannel
+        LicenseEventRelay.methodChannel = methodChannel
     }
 
     override fun onPause() {
@@ -120,8 +147,16 @@ class MainActivity : FlutterActivity() {
      * Geri / son görevden silme → isFinishing true → servisi durdur.
      */
     override fun onDestroy() {
+        licenseRevokeReceiver?.let {
+            try {
+                unregisterReceiver(it)
+            } catch (_: IllegalArgumentException) {
+            }
+        }
+        licenseRevokeReceiver = null
         if (isFinishing) {
             TripLogRelay.methodChannel = null
+            LicenseEventRelay.methodChannel = null
             if (OtoKabulPrefs.isServiceRunning(applicationContext)) {
                 ForegroundService.stop(applicationContext)
             }

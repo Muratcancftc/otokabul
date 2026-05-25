@@ -1,7 +1,11 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:oto_kabul/activation_screen.dart';
+import 'package:oto_kabul/license_manager.dart';
+import 'package:oto_kabul/native_bridge.dart';
 import 'package:oto_kabul/test_runner.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -14,13 +18,15 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
-  static const _channel = MethodChannel('com.otokabul/service');
+  static const _channel = NativeBridge.channel;
   static const _prefsKeyMinKm = 'min_km';
   static const _prefsKeyBatteryAsked = 'battery_opt_asked';
 
   double _minKm = 5;
   bool _serviceRunning = false;
   bool _accessibilityEnabled = false;
+  int _licenseDaysLeft = 0;
+  bool _licenseExpiringSoon = false;
   final List<_LogEntry> _logs = [];
   Timer? _statusTimer;
 
@@ -31,12 +37,44 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     _channel.setMethodCallHandler(_onNativeCall);
     _loadSettings();
     _refreshStatus();
-    _statusTimer = Timer.periodic(const Duration(seconds: 3), (_) {
-      _refreshStatus();
+    _statusTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+      if (WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {
+        _refreshStatus();
+      }
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _maybeRequestBatteryExemption();
       _syncRecentLogs();
+      _loadLicenseInfo();
+    });
+  }
+
+  Future<void> _verifyLicenseStillValid() async {
+    final ok = await LicenseManager.checkLicense();
+    if (!mounted || ok) return;
+    _goToActivationRevoked();
+  }
+
+  Future<void> _goToActivationRevoked() async {
+    await LicenseManager.clearLicense();
+    if (!mounted) return;
+    await Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute<void>(
+        builder: (_) => const ActivationScreen(
+          revokedMessage: LicenseManager.msgRevoked,
+        ),
+      ),
+      (_) => false,
+    );
+  }
+
+  Future<void> _loadLicenseInfo() async {
+    final days = await LicenseManager.getRemainingDays();
+    final soon = await LicenseManager.isExpiringSoon();
+    if (!mounted) return;
+    setState(() {
+      _licenseDaysLeft = days;
+      _licenseExpiringSoon = soon;
     });
   }
 
@@ -50,8 +88,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
+      _verifyLicenseStillValid();
       _refreshStatus();
       _syncRecentLogs();
+      _loadLicenseInfo();
     }
     // Uygulama tamamen kapatıldıysa native taraf servisi durdurur; UI senkronu
     if (state == AppLifecycleState.detached) {
@@ -63,20 +103,20 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final prefs = await SharedPreferences.getInstance();
     final saved = prefs.getDouble(_prefsKeyMinKm) ?? 5.0;
     setState(() => _minKm = saved.clamp(1, 30));
-    await _channel.invokeMethod('setMinKm', {'km': _minKm});
+    await NativeBridge.invoke('setMinKm', {'km': _minKm});
   }
 
   Future<void> _saveMinKm(double km) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble(_prefsKeyMinKm, km);
-    await _channel.invokeMethod('setMinKm', {'km': km});
+    await NativeBridge.invoke('setMinKm', {'km': km});
   }
 
   Future<void> _refreshStatus() async {
     try {
       final running =
-          await _channel.invokeMethod<bool>('isServiceRunning') ?? false;
-      final a11y = await _channel.invokeMethod<bool>('isAccessibilityEnabled') ??
+          await NativeBridge.invoke<bool>('isServiceRunning') ?? false;
+      final a11y = await NativeBridge.invoke<bool>('isAccessibilityEnabled') ??
           false;
       if (mounted) {
         setState(() {
@@ -88,12 +128,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _maybeRequestBatteryExemption() async {
+    if (kIsWeb) return;
     final prefs = await SharedPreferences.getInstance();
     if (prefs.getBool(_prefsKeyBatteryAsked) == true) return;
 
     try {
       final alreadyIgnored =
-          await _channel.invokeMethod<bool>('isIgnoringBatteryOptimizations') ??
+          await NativeBridge.invoke<bool>('isIgnoringBatteryOptimizations') ??
               false;
       if (alreadyIgnored) {
         await prefs.setBool(_prefsKeyBatteryAsked, true);
@@ -129,7 +170,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
     if (allow == true && mounted) {
       try {
-        await _channel.invokeMethod('requestIgnoreBatteryOptimizations');
+        await NativeBridge.invoke('requestIgnoreBatteryOptimizations');
       } catch (_) {}
     }
   }
@@ -137,7 +178,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Future<void> _syncRecentLogs() async {
     try {
       final raw =
-          await _channel.invokeMethod<List<dynamic>>('getRecentLogs') ?? [];
+          await NativeBridge.invoke<List<dynamic>>('getRecentLogs') ?? [];
       if (!mounted) return;
       setState(() {
         _logs
@@ -151,6 +192,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 accepted: m['accepted'] as bool? ?? false,
                 minKm: (m['minKm'] as num?)?.toDouble() ?? _minKm,
                 reason: m['reason'] as String? ?? '',
+                earningMin: (m['earning_min'] as num?)?.toInt(),
+                earningMax: (m['earning_max'] as num?)?.toInt(),
               );
             }),
           );
@@ -171,6 +214,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   Future<dynamic> _onNativeCall(MethodCall call) async {
+    if (call.method == 'onLicenseRevoked') {
+      _goToActivationRevoked();
+      return;
+    }
     if (call.method == 'onLog') {
       final args = call.arguments as Map<dynamic, dynamic>;
       _addLogEntry(
@@ -180,6 +227,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           accepted: args['accepted'] as bool? ?? false,
           minKm: (args['minKm'] as num?)?.toDouble() ?? _minKm,
           reason: args['reason'] as String? ?? '',
+          earningMin: (args['earning_min'] as num?)?.toInt(),
+          earningMax: (args['earning_max'] as num?)?.toInt(),
         ),
       );
     }
@@ -188,9 +237,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Future<void> _toggleService() async {
     try {
       if (_serviceRunning) {
-        await _channel.invokeMethod('stop');
+        await NativeBridge.invoke('stop');
       } else {
-        await _channel.invokeMethod('start');
+        await NativeBridge.invoke('start');
       }
       await _refreshStatus();
     } on PlatformException catch (e) {
@@ -214,12 +263,63 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         title: const Text('OtoKabul 🚕'),
         centerTitle: true,
         backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: Center(
+              child: Text(
+                '🔑 $_licenseDaysLeft gün kaldı',
+                style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+              ),
+            ),
+          ),
+        ],
       ),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            if (kIsWeb) ...[
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.blue.shade300),
+                ),
+                child: Text(
+                  'Web önizleme — otomatik kabul yalnızca Android\'de çalışır.',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Colors.blue.shade900,
+                        fontWeight: FontWeight.w600,
+                      ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
+            if (_licenseExpiringSoon) ...[
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.amber.shade100,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.amber.shade700),
+                ),
+                child: Text(
+                  '⚠️ Lisansınız $_licenseDaysLeft gün sonra doluyor!',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Colors.amber.shade900,
+                        fontWeight: FontWeight.w600,
+                      ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
             _StatusCard(
               serviceRunning: _serviceRunning,
               accessibilityEnabled: _accessibilityEnabled,
@@ -373,6 +473,8 @@ class _LogEntry {
   final bool accepted;
   final double minKm;
   final String reason;
+  final int? earningMin;
+  final int? earningMax;
 
   _LogEntry({
     required this.time,
@@ -380,20 +482,34 @@ class _LogEntry {
     required this.accepted,
     required this.minKm,
     this.reason = '',
+    this.earningMin,
+    this.earningMax,
   });
+
+  String _earningLabel() {
+    if (earningMin != null && earningMax != null) {
+      return '₺$earningMin-$earningMax';
+    }
+    return '';
+  }
 
   String format(String Function(double) fmtKm) {
     final kmStr = fmtKm(km);
+    final earning = _earningLabel();
+    final earningPart = earning.isNotEmpty ? ' - $earning' : '';
     if (reason == 'click_failed') {
-      return '⚠️ $time - $kmStr km - BUTONA BASILAMADI (min: ${minKm.toStringAsFixed(0)}km)';
+      return '⚠️ $time - $kmStr km$earningPart - BUTONA BASILAMADI (min: ${minKm.toStringAsFixed(0)}km)';
     }
     if (reason == 'no_km') {
       return '⚠️ $time - KM OKUNAMADI — teklif kartı görüldü, erişilebilirlik metni eksik';
     }
     if (accepted) {
-      return '✅ $time - $kmStr km - KABUL EDİLDİ';
+      return '✅ $time - $kmStr km$earningPart - KABUL EDİLDİ';
     }
-    return '❌ $time - $kmStr km - ATLANDI (min: ${minKm.toStringAsFixed(0)}km)';
+    if (reason == 'skipped') {
+      return '⏭️ $time - $kmStr km$earningPart - ATLANDI (min: ${minKm.toStringAsFixed(0)}km) — kısa tik sesi';
+    }
+    return '❌ $time - $kmStr km$earningPart - ATLANDI (min: ${minKm.toStringAsFixed(0)}km)';
   }
 }
 

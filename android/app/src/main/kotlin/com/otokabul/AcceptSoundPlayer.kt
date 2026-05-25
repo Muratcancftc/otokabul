@@ -15,17 +15,36 @@ object AcceptSoundPlayer {
     private const val DING_DURATION_MS = 180
 
     fun playDing(context: Context) {
+        playTone(context, ToneGenerator.TONE_PROP_ACK, 200, 90)
+    }
+
+    /** Teklif görüldü ama km düşük — kısa tik (ding değil). */
+    fun playSkipTick(context: Context) {
+        playTone(context, ToneGenerator.TONE_PROP_BEEP, 80, 70)
+    }
+
+    private fun playTone(context: Context, toneType: Int, durationMs: Int, volume: Int) {
         try {
-            val tone = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 85)
-            tone.startTone(ToneGenerator.TONE_PROP_ACK, DING_DURATION_MS)
+            val tone = ToneGenerator(AudioManager.STREAM_ALARM, volume)
+            tone.startTone(toneType, durationMs)
             Handler(Looper.getMainLooper()).postDelayed({
                 try {
                     tone.release()
                 } catch (_: Exception) {
                 }
-            }, (DING_DURATION_MS + 40).toLong())
+            }, (durationMs + 50).toLong())
         } catch (_: Exception) {
-            // Ses kapalı veya cihaz desteklemiyorsa sessiz devam
+            try {
+                val tone = ToneGenerator(AudioManager.STREAM_NOTIFICATION, volume)
+                tone.startTone(toneType, durationMs)
+                Handler(Looper.getMainLooper()).postDelayed({
+                    try {
+                        tone.release()
+                    } catch (_: Exception) {
+                    }
+                }, (durationMs + 50).toLong())
+            } catch (_: Exception) {
+            }
         }
     }
 }

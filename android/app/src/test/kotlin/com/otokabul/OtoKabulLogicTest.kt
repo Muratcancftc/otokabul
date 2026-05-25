@@ -125,6 +125,98 @@ class OtoKabulLogicTest {
     }
 
     @Test
+    fun integerKm_parsed() {
+        assertEquals(3.0, OtoKabulLogic.parseKm("3 km")!!, 0.001)
+        val texts = listOf(
+            "7 dk • 1 km",
+            "8 dk • 3 km",
+            "Kabul et",
+            "Tümünü reddet (1)",
+        )
+        assertEquals(3.0, OtoKabulLogic.journeyKmFromTexts(texts)!!, 0.001)
+    }
+
+    @Test
+    fun joinedFullTree_splitNodesWithoutBullet() {
+        val texts = listOf(
+            "Tümünü reddet",
+            "7 dk",
+            "2,56 km",
+            "adres 1",
+            "8 dk",
+            "2,24 km",
+            "adres 2",
+            "Kabul et",
+        )
+        assertEquals(2.24, OtoKabulLogic.journeyKmFromTexts(texts)!!, 0.001)
+    }
+
+    /** Üst m, alt km — yolculuk 3,33 km (üst satır yok sayılır). */
+    @Test
+    fun pickupMeters_journeyKm_usesBottomRow() {
+        val texts = listOf(
+            "Tümünü reddet (1)",
+            "1 dk • 509 m",
+            "Osman Yılmaz Mah., 606 Sok., Gebze",
+            "7 dk • 3,33 km",
+            "Arapçeşme Mah., Yeni Bağdat Cad., Gebze",
+            "Kabul et",
+            "Toplam kazanç",
+            "₺185 - 230",
+        )
+        assertTrue(OtoKabulLogic.isTripOfferScreen(texts))
+        assertEquals(3.33, OtoKabulLogic.journeyKmFromTexts(texts)!!, 0.001)
+        assertTrue(OtoKabulLogic.shouldAccept(3.33, 3.0))
+        assertFalse(OtoKabulLogic.shouldAccept(3.33, 4.0))
+    }
+
+    @Test
+    fun pickupMeters_splitNodes_usesBottomKm() {
+        val texts = listOf(
+            "Tümünü reddet (1)",
+            "1 dk",
+            "509 m",
+            "7 dk",
+            "3,33 km",
+            "Kabul et",
+            "₺185 - 230",
+        )
+        assertEquals(3.33, OtoKabulLogic.journeyKmFromTexts(texts)!!, 0.001)
+    }
+
+    @Test
+    fun bothKmRows_usesBottom_notTop() {
+        val texts = listOf(
+            "7 dk • 2,56 km",
+            "8 dk • 2,24 km",
+            "Kabul et",
+        )
+        assertEquals(2.24, OtoKabulLogic.journeyKmFromTexts(texts)!!, 0.001)
+    }
+
+    @Test
+    fun parseEarnings_range() {
+        val e = OtoKabulLogic.parseEarnings("₺170 - 215")!!
+        assertEquals(170, e.min)
+        assertEquals(215, e.max)
+    }
+
+    @Test
+    fun earningsFromTexts_realOfferCard() {
+        val e = OtoKabulLogic.earningsFromTexts(realOfferTexts)!!
+        assertEquals(170, e.min)
+        assertEquals(215, e.max)
+    }
+
+    @Test
+    fun earningsFromTexts_splitNode() {
+        val texts = listOf("Toplam kazanç", "₺185 - 230", "Kabul et")
+        val e = OtoKabulLogic.earningsFromTexts(texts)!!
+        assertEquals(185, e.min)
+        assertEquals(230, e.max)
+    }
+
+    @Test
     fun delayInRange() {
         val random = java.util.Random(42)
         repeat(20) {

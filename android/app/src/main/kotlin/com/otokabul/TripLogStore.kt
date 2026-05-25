@@ -18,6 +18,8 @@ object TripLogStore {
         val accepted: Boolean,
         val minKm: Double,
         val reason: String,
+        val earningMin: Int? = null,
+        val earningMax: Int? = null,
     )
 
     fun append(context: Context, entry: Entry) {
@@ -43,6 +45,8 @@ object TripLogStore {
                             accepted = o.optBoolean("accepted", false),
                             minKm = o.optDouble("minKm", 5.0),
                             reason = o.optString("reason", ""),
+                            earningMin = o.optInt("earningMin", -1).takeIf { it >= 0 },
+                            earningMax = o.optInt("earningMax", -1).takeIf { it >= 0 },
                         ),
                     )
                 }
@@ -62,6 +66,8 @@ object TripLogStore {
                     put("accepted", e.accepted)
                     put("minKm", e.minKm)
                     put("reason", e.reason)
+                    put("earningMin", e.earningMin ?: -1)
+                    put("earningMax", e.earningMax ?: -1)
                 },
             )
         }
@@ -80,6 +86,8 @@ object TripLogStore {
                 "accepted" to it.accepted,
                 "minKm" to it.minKm,
                 "reason" to it.reason,
+                "earning_min" to it.earningMin,
+                "earning_max" to it.earningMax,
             )
         }
 }

@@ -1,6 +1,5 @@
 package com.otokabul
 
-import android.app.ActivityManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -13,6 +12,7 @@ import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.Handler
+import android.os.HandlerThread
 import android.os.IBinder
 import android.os.Looper
 import android.os.PowerManager
@@ -37,6 +37,7 @@ class ForegroundService : Service() {
         const val ACTION_RECOVER = "com.otokabul.RECOVER"
 
         private const val WATCHDOG_INTERVAL_MS = 30_000L
+        private const val LICENSE_CHECK_INTERVAL_MS = 30 * 60 * 1000L
         private const val MIN_RECOVERY_INTERVAL_MS = 60_000L
         private const val PARTIAL_WAKE_LOCK_TAG = "OtoKabul:Partial"
 
@@ -60,18 +61,10 @@ class ForegroundService : Service() {
         var running: Boolean = false
             private set
 
-        /** Statik bayrak + prefs + ActivityManager (Samsung ölümü sonrası). */
+        /** Statik bayrak + prefs — getRunningServices ANR yapabildiği için kullanılmıyor. */
         fun isActuallyRunning(context: Context): Boolean {
             if (!OtoKabulPrefs.isServiceRunning(context)) return false
-            if (running) return true
-            val manager = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
-            @Suppress("DEPRECATION")
-            for (service in manager.getRunningServices(Int.MAX_VALUE)) {
-                if (service.service.className == ForegroundService::class.java.name) {
-                    return true
-                }
-            }
-            return false
+            return running
         }
     }
 
@@ -81,6 +74,11 @@ class ForegroundService : Service() {
     private var isRecovering = false
     private var screenReceiverRegistered = false
     private var partialWakeLock: PowerManager.WakeLock? = null
+    private var lastLicenseCheckAt = 0L
+    private var licenseWorker: HandlerThread? = null
+    private var licenseHandler: Handler? = null
+    @Volatile
+    private var licenseCheckRunning = false
 
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -98,6 +96,7 @@ class ForegroundService : Service() {
             ScreenWakeManager.renewIfNeeded(applicationContext)
             checkScreenState()
             checkAccessibilityAndRecover()
+            maybeCheckLicenseRemote()
             handler.postDelayed(this, WATCHDOG_INTERVAL_MS)
         }
     }
@@ -105,6 +104,8 @@ class ForegroundService : Service() {
     override fun onCreate() {
         super.onCreate()
         createNotificationChannels()
+        licenseWorker = HandlerThread("OtoKabulLicense").apply { start() }
+        licenseHandler = Handler(licenseWorker!!.looper)
 
         // Samsung: 5 sn içinde startForeground zorunlu — onCreate'de çağır
         // running/prefs yalnızca onStartCommand (BAŞLAT) ile set edilir
@@ -143,6 +144,7 @@ class ForegroundService : Service() {
         ScreenWakeManager.acquireKeepScreenOn(applicationContext)
         registerScreenReceiver()
         startWatchdog()
+        lastLicenseCheckAt = System.currentTimeMillis()
         checkScreenState()
 
         if (intent?.action == ACTION_RECOVER) {
@@ -165,6 +167,10 @@ class ForegroundService : Service() {
     override fun onDestroy() {
         running = false
         stopWatchdog()
+        licenseHandler?.removeCallbacksAndMessages(null)
+        licenseWorker?.quitSafely()
+        licenseWorker = null
+        licenseHandler = null
         unregisterScreenReceiver()
         ScreenWakeManager.release(applicationContext)
         releasePartialWakeLock()
@@ -339,6 +345,52 @@ class ForegroundService : Service() {
                     getString(R.string.notification_recover_failed),
                 )
             }
+        }
+    }
+
+    private fun maybeCheckLicenseRemote() {
+        val now = System.currentTimeMillis()
+        if (now - lastLicenseCheckAt < LICENSE_CHECK_INTERVAL_MS) {
+            return
+        }
+        lastLicenseCheckAt = now
+        scheduleLicenseCheck()
+    }
+
+    private fun scheduleLicenseCheck() {
+        val handler = licenseHandler ?: return
+        if (licenseCheckRunning) return
+        licenseCheckRunning = true
+        handler.post {
+            try {
+                when (LicenseRemoteChecker.check(applicationContext).status) {
+                    LicenseRemoteChecker.Status.INACTIVE,
+                    LicenseRemoteChecker.Status.EXPIRED,
+                    LicenseRemoteChecker.Status.NOT_FOUND,
+                    -> revokeLicenseAndStop()
+                    else -> Unit
+                }
+            } finally {
+                licenseCheckRunning = false
+            }
+        }
+    }
+
+    private fun revokeLicenseAndStop() {
+        handler.post {
+            if (stopRequested) return@post
+            FlutterLicensePrefs.clear(applicationContext)
+            OtoKabulPrefs.setServiceRunning(applicationContext, false)
+            LicenseEventRelay.notifyRevoked(applicationContext)
+            stopRequested = true
+            stopWatchdog()
+            unregisterScreenReceiver()
+            ScreenWakeManager.release(applicationContext)
+            releasePartialWakeLock()
+            cancelScreenOffNotification()
+            running = false
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
         }
     }
 

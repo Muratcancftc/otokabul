@@ -21,7 +21,7 @@ object AcceptClickHelper {
         collectAllTexts(root, allTexts)
         if (!OtoKabulLogic.isTripOfferScreen(allTexts)) return false
 
-        val target = findAcceptNode(root) ?: return false
+        val target = findAcceptNode(root) ?: findClickableWithKabulInSubtree(root) ?: return false
         val clickable = findClickableNode(target)
         try {
             if (clickable.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
@@ -55,6 +55,26 @@ object AcceptClickHelper {
             if (found != null) return found
         }
         return null
+    }
+
+    /** Metin node'da yoksa tıklanabilir üst öğede "Kabul et" alt ağacı ara. */
+    private fun findClickableWithKabulInSubtree(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+        if (node.isClickable && subtreeHasAccept(node)) {
+            return AccessibilityNodeInfo.obtain(node)
+        }
+        for (i in 0 until node.childCount) {
+            val child = node.getChild(i) ?: continue
+            val found = findClickableWithKabulInSubtree(child)
+            child.recycle()
+            if (found != null) return found
+        }
+        return null
+    }
+
+    private fun subtreeHasAccept(node: AccessibilityNodeInfo): Boolean {
+        val texts = mutableListOf<String>()
+        collectAllTexts(node, texts)
+        return OtoKabulLogic.hasAcceptButton(texts)
     }
 
     private fun findClickableNode(node: AccessibilityNodeInfo): AccessibilityNodeInfo {

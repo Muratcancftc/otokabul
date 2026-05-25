@@ -1,6 +1,9 @@
 package com.otokabul
 
 import android.content.Context
+import android.os.Handler
+import android.os.HandlerThread
+import android.os.Looper
 import io.flutter.plugin.common.MethodChannel
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -19,17 +22,28 @@ object TripLogRelay {
     @Volatile
     var methodChannel: MethodChannel? = null
 
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val ioThread = HandlerThread("OtoKabulLogIO").apply { start() }
+    private val ioHandler = Handler(ioThread.looper)
+
     fun emit(
         context: Context,
         km: Double,
         accepted: Boolean,
         minKm: Double,
         reason: String,
+        earningMin: Int? = null,
+        earningMax: Int? = null,
         time: String = formatTime(),
     ) {
-        TripLogStore.append(
-            context,
-            TripLogStore.Entry(time, km, accepted, minKm, reason),
+        val entry = TripLogStore.Entry(
+            time = time,
+            km = km,
+            accepted = accepted,
+            minKm = minKm,
+            reason = reason,
+            earningMin = earningMin,
+            earningMax = earningMax,
         )
         val payload = mapOf(
             "time" to time,
@@ -37,14 +51,24 @@ object TripLogRelay {
             "accepted" to accepted,
             "minKm" to minKm,
             "reason" to reason,
+            "earning_min" to earningMin,
+            "earning_max" to earningMax,
         )
-        try {
-            methodChannel?.invokeMethod("onLog", payload)
-        } catch (_: Exception) {
-            // Flutter kapalı — kayıt prefs'te kalır
+        ioHandler.post {
+            TripLogStore.append(context.applicationContext, entry)
         }
-        if (reason == REASON_CLICK_FAILED) {
-            TripAlertNotifier.showClickFailed(context, km, minKm)
+        mainHandler.post {
+            try {
+                methodChannel?.invokeMethod("onLog", payload)
+            } catch (_: Exception) {
+                // Flutter kapalı — kayıt prefs'te kalır
+            }
+            when (reason) {
+                REASON_CLICK_FAILED -> TripAlertNotifier.showClickFailed(context, km, minKm)
+                REASON_NO_KM -> TripAlertNotifier.showNoKm(context)
+                REASON_ACCEPTED -> AcceptSoundPlayer.playDing(context)
+                REASON_SKIPPED -> AcceptSoundPlayer.playSkipTick(context)
+            }
         }
     }
 

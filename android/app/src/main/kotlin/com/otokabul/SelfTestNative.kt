@@ -88,6 +88,12 @@ object SelfTestNative {
             "Toplam kazanç",
             "₺170 - 215",
         )
+        val metersTexts = listOf(
+            "1 dk • 509 m",
+            "7 dk • 3,33 km",
+            "Kabul et",
+            "₺185 - 230",
+        )
 
         val parse2_56 = OtoKabulLogic.parseKm("2,56 km") == 2.56
         val parse2_56_dot = OtoKabulLogic.parseKm("2.56 km") == 2.56
@@ -99,9 +105,13 @@ object SelfTestNative {
         val otherScreenOk = !OtoKabulLogic.isTripOfferScreen(
             listOf("Kabul et", "Ayarlar"),
         )
+        val metersJourney = OtoKabulLogic.journeyKmFromTexts(metersTexts) == 3.33
+        val earnings = OtoKabulLogic.earningsFromTexts(offerTexts)
+        val earningsOk = earnings?.min == 170 && earnings.max == 215
 
         val allPass = parse2_56 && parse2_56_dot && parse10_5 && parseAbc &&
-            journeyKm && ignoresPickupRow && tripOfferOk && otherScreenOk
+            journeyKm && ignoresPickupRow && tripOfferOk && otherScreenOk &&
+            metersJourney && earningsOk
 
         return mapOf(
             "minKm" to minKm,
@@ -114,6 +124,8 @@ object SelfTestNative {
             "ignores_pickup_km" to ignoresPickupRow,
             "trip_offer_screen" to tripOfferOk,
             "other_screen_rejected" to otherScreenOk,
+            "meters_pickup_journey_3_33" to metersJourney,
+            "earnings_170_215" to earningsOk,
         )
     }
 
@@ -156,4 +168,8 @@ object SelfTestNative {
     }
 
     fun testDoubleTapProtection(): Boolean = OtoKabulLogic.testDoubleTapProtection()
+
+    /** TEST 11: GitHub active alanı + uzaktan iptal kontrolü */
+    fun testLicenseRemoteRevoke(context: Context): Map<String, Any> =
+        LicenseRemoteChecker.testRemoteActive(context)
 }

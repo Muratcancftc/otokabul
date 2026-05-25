@@ -17,4 +17,6 @@
     <string name="notification_screen_off_short">Ekranı açık tutun!</string>
     <string name="notification_click_failed_title">Kabul edilemedi</string>
     <string name="notification_click_failed_text">%1$s km teklif — min %2$d km (butona basılamadı, BiTaksi ekranını kontrol edin)</string>
+    <string name="notification_no_km_title">Teklif görüldü — km okunamadı</string>
+    <string name="notification_no_km_text">BiTaksi ekranı okundu ama yolculuk km bulunamadı. Erişilebilirliği kapat-aç deneyin.</string>
 </resources>

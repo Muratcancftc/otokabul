@@ -3,34 +3,33 @@ package com.otokabul
 import android.accessibilityservice.AccessibilityService
 import android.os.Handler
 import android.os.HandlerThread
+import android.os.Looper
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import java.util.Random
 
 /**
- * BiTaksi yolculuk teklif kartını izler.
- * Karar: alttaki "8 dk • X km" satırındaki km ≥ taksicinin seçtiği min km.
- * Ağır iş arka plan thread'inde — ana thread ANR olmaz.
+ * BiTaksi yolculuk teklif kartını izler — tüm pencereler taranır.
  */
 class AutoAcceptAccessibilityService : AccessibilityService() {
 
     companion object {
         const val BITAKSI_PACKAGE = "com.projectslender"
-        const val LOG_ACTION = "com.otokabul.LOG"
-        private const val SCAN_DEBOUNCE_MS = 120L
+        private const val SCAN_DEBOUNCE_MS = 80L
 
         @Volatile
         var instance: AutoAcceptAccessibilityService? = null
             private set
     }
 
+    private val mainHandler = Handler(Looper.getMainLooper())
     private val random = Random()
     private var workerThread: HandlerThread? = null
     private var workerHandler: Handler? = null
     private var isProcessing = false
     private var lastHandledAt = 0L
 
-    private val scanRunnable = Runnable { scanActiveWindow() }
+    private val scanRunnable = Runnable { scanAllWindows() }
 
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -50,53 +49,45 @@ class AutoAcceptAccessibilityService : AccessibilityService() {
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null) return
-        if (!OtoKabulPrefs.isServiceRunning(applicationContext)) return
+        if (!ServiceState.isActive(applicationContext)) return
 
-        val eventType = event.eventType
-        if (eventType != AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED &&
-            eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
+        val pkg = event.packageName?.toString() ?: return
+        if (pkg != BITAKSI_PACKAGE) return
+
+        val type = event.eventType
+        if (type != AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED &&
+            type != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED &&
+            type != AccessibilityEvent.TYPE_WINDOWS_CHANGED
         ) {
             return
         }
 
-        val packageName = event.packageName?.toString() ?: return
-        if (packageName != BITAKSI_PACKAGE) return
-
-        val handler = workerHandler ?: return
-        val delay = if (eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
-            0L
-        } else {
-            SCAN_DEBOUNCE_MS
+        workerHandler?.let { h ->
+            h.removeCallbacks(scanRunnable)
+            h.postDelayed(scanRunnable, SCAN_DEBOUNCE_MS)
         }
-        handler.removeCallbacks(scanRunnable)
-        handler.postDelayed(scanRunnable, delay)
     }
 
-    override fun onInterrupt() {
-        // Servis kesildiğinde yapılacak bir şey yok
-    }
+    override fun onInterrupt() {}
 
-    private fun scanActiveWindow() {
+    private fun scanAllWindows() {
         val now = System.currentTimeMillis()
         if (OtoKabulLogic.shouldSkipEvent(now, lastHandledAt, isProcessing)) return
 
-        val root = rootInActiveWindow ?: return
-        try {
-            handlePopup(root)
-        } finally {
-            root.recycle()
-        }
+        val allTexts = AccessibilityRootHelper.collectAllTexts(this)
+        if (allTexts.isEmpty()) return
+
+        handleOfferTexts(allTexts)
     }
 
-    private fun handlePopup(root: AccessibilityNodeInfo) {
-        val allTexts = mutableListOf<String>()
-        collectAllTexts(root, allTexts)
+    private fun handleOfferTexts(allTexts: List<String>) {
         if (!OtoKabulLogic.isTripOfferScreen(allTexts)) return
 
         val km = OtoKabulLogic.journeyKmFromTexts(allTexts)
         val minKm = OtoKabulPrefs.getMinKm(applicationContext)
+        val earnings = OtoKabulLogic.earningsFromTexts(allTexts)
         if (km == null) {
-            sendLog(0.0, TripLogRelay.REASON_NO_KM, minKm)
+            emitOnMain(0.0, TripLogRelay.REASON_NO_KM, minKm, earnings)
             lastHandledAt = System.currentTimeMillis()
             return
         }
@@ -106,24 +97,28 @@ class AutoAcceptAccessibilityService : AccessibilityService() {
             val delayMs = OtoKabulLogic.randomDelayMs(random)
             workerHandler?.postDelayed({
                 try {
-                    val freshRoot = rootInActiveWindow
-                    if (freshRoot != null) {
+                    val freshMinKm = OtoKabulPrefs.getMinKm(applicationContext)
+                    val root = AccessibilityRootHelper.findBestRootForOffer(this)
+                    if (root != null) {
                         try {
                             val freshTexts = mutableListOf<String>()
-                            collectAllTexts(freshRoot, freshTexts)
+                            AccessibilityRootHelper.forEachRoot(this) { r ->
+                                collectTextsInto(r, freshTexts)
+                            }
                             if (!OtoKabulLogic.isTripOfferScreen(freshTexts)) return@postDelayed
                             val freshKm = OtoKabulLogic.journeyKmFromTexts(freshTexts)
                                 ?: return@postDelayed
-                            if (!OtoKabulLogic.shouldAccept(freshKm, minKm)) return@postDelayed
-                            val clicked = AcceptClickHelper.tryClickAccept(this, freshRoot)
+                            if (!OtoKabulLogic.shouldAccept(freshKm, freshMinKm)) return@postDelayed
+                            val freshEarnings = OtoKabulLogic.earningsFromTexts(freshTexts)
+                            val clicked = AcceptClickHelper.tryClickAccept(this, root)
                             val reason = if (clicked) {
                                 TripLogRelay.REASON_ACCEPTED
                             } else {
                                 TripLogRelay.REASON_CLICK_FAILED
                             }
-                            sendLog(freshKm, reason, minKm)
+                            emitOnMain(freshKm, reason, freshMinKm, freshEarnings)
                         } finally {
-                            freshRoot.recycle()
+                            root.recycle()
                         }
                     }
                 } finally {
@@ -132,26 +127,44 @@ class AutoAcceptAccessibilityService : AccessibilityService() {
                 }
             }, delayMs.toLong())
         } else {
-            sendLog(km, TripLogRelay.REASON_SKIPPED, minKm)
+            emitOnMain(km, TripLogRelay.REASON_SKIPPED, minKm, earnings)
             lastHandledAt = System.currentTimeMillis()
         }
     }
 
-    private fun collectAllTexts(node: AccessibilityNodeInfo, out: MutableList<String>) {
-        node.text?.toString()?.let { out.add(it) }
-        node.contentDescription?.toString()?.let { out.add(it) }
+    private fun collectTextsInto(node: AccessibilityNodeInfo, out: MutableList<String>) {
+        node.text?.toString()?.takeIf { it.isNotBlank() }?.let { out.add(it) }
+        node.contentDescription?.toString()?.takeIf { it.isNotBlank() }?.let { out.add(it) }
         for (i in 0 until node.childCount) {
             val child = node.getChild(i) ?: continue
-            collectAllTexts(child, out)
+            collectTextsInto(child, out)
             child.recycle()
         }
     }
 
-    private fun sendLog(km: Double, reason: String, minKm: Double) {
-        val accepted = reason == TripLogRelay.REASON_ACCEPTED
-        if (accepted) {
-            AcceptSoundPlayer.playDing(applicationContext)
+    private fun emitOnMain(
+        km: Double,
+        reason: String,
+        minKm: Double,
+        earnings: OtoKabulLogic.EarningRange? = null,
+    ) {
+        mainHandler.post {
+            TripLogRelay.emit(
+                applicationContext,
+                km,
+                reason == TripLogRelay.REASON_ACCEPTED,
+                minKm,
+                reason,
+                earningMin = earnings?.min,
+                earningMax = earnings?.max,
+            )
+            SheetsLogger.logTrip(
+                context = applicationContext,
+                km = km,
+                accepted = reason == TripLogRelay.REASON_ACCEPTED,
+                earningMin = earnings?.min,
+                earningMax = earnings?.max,
+            )
         }
-        TripLogRelay.emit(applicationContext, km, accepted, minKm, reason)
     }
 }

@@ -1,0 +1,1287 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>OtoKabul — Yönetim Paneli</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --surface: #1e293b;
+      --surface2: #334155;
+      --surface-hover: #273449;
+      --border: rgba(148, 163, 184, 0.12);
+      --text: #f1f5f9;
+      --muted: #94a3b8;
+      --green: #10b981;
+      --green-dim: rgba(16, 185, 129, 0.15);
+      --red: #f87171;
+      --red-dim: rgba(248, 113, 113, 0.15);
+      --yellow: #fbbf24;
+      --yellow-dim: rgba(251, 191, 36, 0.12);
+      --blue: #38bdf8;
+      --blue-dim: rgba(56, 189, 248, 0.15);
+      --purple: #a78bfa;
+      --radius: 14px;
+      --radius-sm: 10px;
+      --shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
+      --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.25);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+    .wrap { max-width: 1280px; margin: 0 auto; padding: 20px 16px 40px; }
+    .hidden { display: none !important; }
+
+    /* Login */
+    .login-wrap {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      background: radial-gradient(ellipse at top, #1e3a5f 0%, var(--bg) 60%);
+    }
+    .login-card {
+      width: 100%;
+      max-width: 420px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 32px;
+      box-shadow: var(--shadow);
+    }
+    .login-card h1 { font-size: 1.4rem; font-weight: 700; margin-bottom: 6px; }
+    .login-card .sub { color: var(--muted); font-size: 0.875rem; margin-bottom: 24px; }
+
+    /* Header */
+    .header {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      align-items: flex-start;
+      justify-content: space-between;
+      margin-bottom: 28px;
+    }
+    .header h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.02em; }
+    .header .sub { color: var(--muted); font-size: 0.85rem; margin-top: 4px; }
+    .toolbar { display: flex; flex-wrap: wrap; gap: 8px; }
+
+    /* Summary cards */
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 14px;
+      margin-bottom: 24px;
+    }
+    @media (max-width: 900px) { .summary-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 480px) { .summary-grid { grid-template-columns: 1fr; } }
+
+    .summary-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 18px 20px;
+      box-shadow: var(--shadow-sm);
+      display: flex;
+      gap: 14px;
+      align-items: flex-start;
+    }
+    .summary-icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.25rem;
+      flex-shrink: 0;
+    }
+    .summary-icon.green { background: var(--green-dim); }
+    .summary-icon.blue { background: var(--blue-dim); }
+    .summary-icon.emerald { background: var(--green-dim); }
+    .summary-icon.red { background: var(--red-dim); }
+    .summary-value { font-size: 1.45rem; font-weight: 700; letter-spacing: -0.02em; line-height: 1.2; }
+    .summary-label { font-size: 0.78rem; color: var(--muted); margin-top: 4px; font-weight: 500; }
+
+    /* Card */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-sm);
+      overflow: hidden;
+    }
+    .card-head {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+      font-weight: 600;
+      font-size: 0.95rem;
+    }
+
+    /* Table */
+    .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+    th {
+      padding: 12px 14px;
+      text-align: left;
+      color: var(--muted);
+      font-weight: 600;
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      white-space: nowrap;
+      background: rgba(15, 23, 42, 0.4);
+      border-bottom: 1px solid var(--border);
+    }
+    td {
+      padding: 13px 14px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: middle;
+    }
+    tr.data-row {
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    tr.data-row:hover { background: var(--surface-hover); }
+    tr.row-expiring { background: rgba(251, 191, 36, 0.06); }
+    tr.row-expired { background: rgba(248, 113, 113, 0.06); }
+    .mono { font-family: ui-monospace, 'SF Mono', monospace; font-weight: 600; letter-spacing: 0.05em; }
+    .num-cell { font-variant-numeric: tabular-nums; }
+
+    /* Badge */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .badge-green { background: var(--green-dim); color: var(--green); }
+    .badge-red { background: var(--red-dim); color: var(--red); }
+    .badge-gray { background: rgba(148, 163, 184, 0.15); color: var(--muted); }
+    .badge-yellow { background: var(--yellow-dim); color: var(--yellow); }
+
+    /* Buttons */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 9px 16px;
+      border: none;
+      border-radius: var(--radius-sm);
+      font-size: 0.84rem;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      transition: opacity 0.15s, transform 0.1s;
+    }
+    .btn:active { transform: scale(0.98); }
+    .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    .btn-primary { background: linear-gradient(135deg, #0ea5e9, #0284c7); color: #fff; }
+    .btn-success { background: var(--green); color: #052e16; }
+    .btn-danger { background: var(--red); color: #fff; }
+    .btn-ghost {
+      background: transparent;
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .btn-ghost:hover { background: var(--surface-hover); }
+    .btn-sm { padding: 6px 11px; font-size: 0.76rem; }
+    .actions { display: flex; flex-wrap: wrap; gap: 5px; }
+    .actions .btn { pointer-events: auto; }
+
+    /* Detail page */
+    .detail-header { margin-bottom: 24px; }
+    .back-btn { margin-bottom: 16px; }
+    .detail-title { font-size: 1.75rem; font-weight: 700; letter-spacing: -0.02em; }
+    .detail-sub { color: var(--muted); font-size: 0.9rem; margin-top: 6px; }
+    .detail-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 14px;
+      margin-bottom: 24px;
+    }
+    @media (max-width: 768px) { .detail-grid { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 400px) { .detail-grid { grid-template-columns: 1fr; } }
+
+    .chart-card { padding: 20px; margin-bottom: 24px; }
+    .chart-card h3 { font-size: 0.9rem; font-weight: 600; margin-bottom: 16px; color: var(--muted); }
+    .chart-wrap { position: relative; height: 220px; }
+
+    /* Form */
+    label { display: block; font-size: 0.78rem; color: var(--muted); margin-bottom: 6px; font-weight: 500; }
+    input[type="password"], textarea {
+      width: 100%;
+      padding: 11px 14px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--text);
+      font-size: 0.95rem;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    input[type="password"]:focus, textarea:focus { border-color: var(--blue); }
+    textarea { min-height: 80px; resize: vertical; }
+
+    /* Toast & errors */
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      padding: 12px 22px;
+      border-radius: 999px;
+      font-size: 0.875rem;
+      z-index: 200;
+      box-shadow: var(--shadow);
+      opacity: 0;
+      transition: opacity 0.25s;
+      pointer-events: none;
+    }
+    .toast.show { opacity: 1; }
+    .global-error {
+      background: var(--red-dim);
+      border: 1px solid rgba(248, 113, 113, 0.35);
+      color: #fecaca;
+      padding: 12px 16px;
+      border-radius: var(--radius-sm);
+      margin-bottom: 16px;
+      font-size: 0.875rem;
+    }
+    .info-banner {
+      background: var(--blue-dim);
+      border: 1px solid rgba(56, 189, 248, 0.25);
+      color: #bae6fd;
+      padding: 10px 14px;
+      border-radius: var(--radius-sm);
+      margin-bottom: 16px;
+      font-size: 0.82rem;
+    }
+    .loading { color: var(--muted); text-align: center; padding: 40px 20px; }
+    .err { color: var(--red); font-size: 0.85rem; margin-top: 8px; }
+
+    /* Modal */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(4px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      z-index: 100;
+    }
+    .modal {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+      width: 100%;
+      max-width: 440px;
+      box-shadow: var(--shadow);
+    }
+    .modal h3 { margin-bottom: 14px; font-size: 1.05rem; }
+    .modal-actions { display: flex; gap: 10px; margin-top: 18px; justify-content: flex-end; flex-wrap: wrap; }
+    .modal-actions .btn-danger { margin-right: auto; }
+
+    /* Mobile table → cards */
+    @media (max-width: 640px) {
+      .desktop-table { display: none; }
+      .mobile-cards { display: block; }
+    }
+    @media (min-width: 641px) {
+      .mobile-cards { display: none; }
+    }
+    .mob-card {
+      padding: 16px;
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .mob-card:hover { background: var(--surface-hover); }
+    .mob-card-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+    .mob-card-meta { font-size: 0.78rem; color: var(--muted); display: flex; flex-wrap: wrap; gap: 8px; }
+    .action-tag {
+      font-size: 0.72rem;
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-weight: 600;
+    }
+    .action-tag.accept { background: var(--green-dim); color: var(--green); }
+    .action-tag.reject { background: var(--red-dim); color: var(--red); }
+  </style>
+</head>
+<body>
+
+  <div id="fileProtocolWarn" class="global-error" style="display:none;margin:16px;border-radius:10px">
+    ⚠️ Panel <strong>file://</strong> ile açılamaz. Terminalde proje klasöründe şunu çalıştırın:
+    <code style="display:block;margin-top:8px;padding:8px;background:#0f172a;border-radius:6px">python3 -m http.server 8765</code>
+    Sonra tarayıcıda: <a href="http://localhost:8765/panel.html" style="color:#38bdf8">http://localhost:8765/panel.html</a>
+  </div>
+  <script>
+    if (window.location.protocol === 'file:') {
+      document.getElementById('fileProtocolWarn').style.display = 'block';
+    }
+  </script>
+
+  <!-- Giriş -->
+  <div id="loginScreen" class="login-wrap">
+    <div class="login-card">
+      <h1>🚕 OtoKabul Panel</h1>
+      <p class="sub">GitHub Personal Access Token — <strong>repo</strong> yetkisi gerekli</p>
+      <label for="tokenInput">GitHub Token</label>
+      <input id="tokenInput" type="password" placeholder="ghp_..." autocomplete="off" />
+      <p class="err hidden" id="loginErr"></p>
+      <div style="margin-top:20px">
+        <button type="button" class="btn btn-primary" id="loginBtn" style="width:100%">Giriş Yap</button>
+      </div>
+      <p class="sub" style="margin-top:16px;margin-bottom:0;font-size:0.78rem">
+        Token tarayıcıda saklanır. Dosyayı <code>file://</code> ile açmayın —
+        <code>python3 -m http.server 8765</code> kullanın.
+      </p>
+    </div>
+  </div>
+
+  <!-- Ana liste -->
+  <div id="listScreen" class="hidden">
+    <div class="wrap">
+      <div id="globalError" class="global-error hidden"></div>
+
+      <div class="header">
+        <div>
+          <h1>OtoKabul Yönetim</h1>
+          <p class="sub">Muratcancftc/otokabul — lisans &amp; performans</p>
+        </div>
+        <div class="toolbar">
+          <button type="button" class="btn btn-success btn-sm" id="addCodeBtn">➕ Yeni Kod</button>
+          <button type="button" class="btn btn-ghost btn-sm" id="refreshBtn">↻ Yenile</button>
+          <button type="button" class="btn btn-ghost btn-sm" id="logoutBtn">Çıkış</button>
+        </div>
+      </div>
+
+      <div class="summary-grid">
+        <div class="summary-card">
+          <div class="summary-icon green">💰</div>
+          <div>
+            <div class="summary-value" id="statWeekEarnings">—</div>
+            <div class="summary-label">Bu hafta toplam kazanç</div>
+          </div>
+        </div>
+        <div class="summary-card">
+          <div class="summary-icon blue">🚕</div>
+          <div>
+            <div class="summary-value" id="statActiveDrivers">0</div>
+            <div class="summary-label">Aktif taksici</div>
+          </div>
+        </div>
+        <div class="summary-card">
+          <div class="summary-icon emerald">✅</div>
+          <div>
+            <div class="summary-value" id="statWeekAccepts">0</div>
+            <div class="summary-label">Bu hafta toplam kabul</div>
+          </div>
+        </div>
+        <div class="summary-card">
+          <div class="summary-icon red">❌</div>
+          <div>
+            <div class="summary-value" id="statWeekRejects">0</div>
+            <div class="summary-label">Bu hafta toplam red</div>
+          </div>
+        </div>
+      </div>
+
+      <div id="logsInfo" class="info-banner hidden">
+        Henüz trip log yok. Taksiciler teklif aldıkça Google Sheets → panel otomatik dolacak.
+      </div>
+
+      <div class="card">
+        <div class="card-head">Taksiciler <span style="font-weight:400;color:var(--muted);font-size:0.78rem">— satıra tıklayınca detay</span></div>
+        <div id="tableArea" class="loading">Yükleniyor…</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Detay -->
+  <div id="detailScreen" class="hidden">
+    <div class="wrap">
+      <div class="detail-header">
+        <button type="button" class="btn btn-ghost btn-sm back-btn" id="backBtn">← Geri</button>
+        <h2 class="detail-title" id="detailTitle">—</h2>
+        <p class="detail-sub"><span class="mono" id="detailCode">—</span> · <span id="detailStatus">—</span></p>
+      </div>
+
+      <div class="detail-grid">
+        <div class="summary-card">
+          <div class="summary-icon green">💰</div>
+          <div>
+            <div class="summary-value" id="detailEarnings">—</div>
+            <div class="summary-label">Toplam kazanç tahmini</div>
+          </div>
+        </div>
+        <div class="summary-card">
+          <div class="summary-icon emerald">✅</div>
+          <div>
+            <div class="summary-value" id="detailAccepts">0</div>
+            <div class="summary-label">Toplam kabul</div>
+          </div>
+        </div>
+        <div class="summary-card">
+          <div class="summary-icon red">❌</div>
+          <div>
+            <div class="summary-value" id="detailRejects">0</div>
+            <div class="summary-label">Toplam red</div>
+          </div>
+        </div>
+        <div class="summary-card">
+          <div class="summary-icon blue">📏</div>
+          <div>
+            <div class="summary-value" id="detailAvgKm">—</div>
+            <div class="summary-label">Ortalama km</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card chart-card">
+        <h3>Günlük kabul (son 7 gün)</h3>
+        <div class="chart-wrap"><canvas id="acceptChart"></canvas></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">İşlem geçmişi</div>
+        <p id="detailLogEmpty" class="loading hidden">Henüz log kaydı yok</p>
+        <div id="detailLogTable"></div>
+      </div>
+
+      <div class="card" style="margin-top:16px;padding:16px 20px">
+        <div class="actions" id="detailActions"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script>
+    (function () {
+      'use strict';
+
+      var REPO = 'Muratcancftc/otokabul';
+      var LICENSES_FILE = 'licenses.json';
+      var SCRIPT_URL =
+        'https://script.google.com/macros/s/AKfycby2cxzATPxiKnMNnLRBfCFu_Gx-JH02HFQI7YSHZrnKh20T7JEiZTnGZj8eOrhDrMe4/exec';
+      var TOKEN_KEY = 'otokabul_gh_token';
+      var LICENSES_URL = 'https://api.github.com/repos/' + REPO + '/contents/' + LICENSES_FILE;
+
+      var currentSha = null;
+      var licenses = [];
+      var tripLogs = [];
+      var noteEditIndex = null;
+      var detailIndex = null;
+      var chartInstance = null;
+
+      function $(id) { return document.getElementById(id); }
+
+      function toast(msg) {
+        var el = $('toast');
+        if (!el) return;
+        el.textContent = msg;
+        el.classList.add('show');
+        setTimeout(function () { el.classList.remove('show'); }, 2400);
+      }
+
+      function showGlobalError(msg) {
+        var el = $('globalError');
+        if (!el) return;
+        if (msg) { el.textContent = msg; el.classList.remove('hidden'); }
+        else { el.textContent = ''; el.classList.add('hidden'); }
+      }
+
+      function getToken() {
+        try { return localStorage.getItem(TOKEN_KEY) || ''; }
+        catch (_) { return ''; }
+      }
+
+      function setToken(t) { localStorage.setItem(TOKEN_KEY, t.trim()); }
+      function clearToken() { localStorage.removeItem(TOKEN_KEY); }
+
+      function apiHeaders() {
+        return {
+          'Authorization': 'Bearer ' + getToken(),
+          'Accept': 'application/vnd.github+json',
+          'X-GitHub-Api-Version': '2022-11-28',
+          'Content-Type': 'application/json'
+        };
+      }
+
+      function decodeBase64Utf8(b64) {
+        var binary = atob(b64.replace(/\s/g, ''));
+        var bytes = new Uint8Array(binary.length);
+        for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        return new TextDecoder('utf-8').decode(bytes);
+      }
+
+      function encodeBase64Utf8(str) {
+        var bytes = new TextEncoder().encode(str);
+        var binary = '';
+        for (var i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+        return btoa(binary);
+      }
+
+      function esc(s) {
+        return String(s)
+          .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+      }
+
+      function generateCode() {
+        var chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+        var code = 'TK';
+        for (var i = 0; i < 6; i++) code += chars.charAt(Math.floor(Math.random() * chars.length));
+        return code;
+      }
+
+      function parseDate(iso) {
+        if (!iso) return null;
+        var s = String(iso).trim();
+        if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+          var p = s.split('-');
+          return new Date(parseInt(p[0], 10), parseInt(p[1], 10) - 1, parseInt(p[2], 10), 23, 59, 59);
+        }
+        var d = new Date(s);
+        return isNaN(d.getTime()) ? null : d;
+      }
+
+      function parseLogDate(log) {
+        if (log.date && log.time) {
+          var d = parseDate(log.date + 'T' + log.time);
+          if (d) return d;
+        }
+        var raw = log.datetime || log.date || log.time || '';
+        if (!raw) return null;
+        if (/^\d{2}:\d{2}$/.test(String(raw).trim())) {
+          var today = new Date();
+          return new Date(today.getFullYear(), today.getMonth(), today.getDate(),
+            parseInt(raw.split(':')[0], 10), parseInt(raw.split(':')[1], 10));
+        }
+        return parseDate(raw);
+      }
+
+      function startOfWeek(d) {
+        var date = new Date(d);
+        var day = date.getDay();
+        var diff = day === 0 ? -6 : 1 - day;
+        date.setDate(date.getDate() + diff);
+        date.setHours(0, 0, 0, 0);
+        return date;
+      }
+
+      function isThisWeek(d) {
+        if (!d) return false;
+        return d >= startOfWeek(new Date());
+      }
+
+      function daysLeft(expiresAt) {
+        var exp = parseDate(expiresAt);
+        if (!exp) return null;
+        var diff = exp.getTime() - Date.now();
+        if (diff <= 0) return 0;
+        return Math.ceil(diff / 86400000);
+      }
+
+      function wasEverUsed(lic) {
+        return !!(lic.activated_at && String(lic.activated_at).trim()) ||
+          !!(lic.device_id && String(lic.device_id).trim());
+      }
+
+      function licenseStatus(lic) {
+        var waiting = !wasEverUsed(lic);
+        var expired = lic.expires_at && daysLeft(lic.expires_at) === 0;
+        if (!lic.active) return { key: 'passive', label: 'Pasif', cls: 'badge-red', emoji: '🔴' };
+        if (waiting) return { key: 'waiting', label: 'Bekliyor', cls: 'badge-gray', emoji: '⚪' };
+        if (expired) return { key: 'used', label: 'Kullanıldı', cls: 'badge-red', emoji: '♻️' };
+        return { key: 'active', label: 'Aktif', cls: 'badge-green', emoji: '🟢' };
+      }
+
+      function fmtDate(iso) {
+        if (!iso) return '—';
+        var d = parseDate(iso);
+        return d ? d.toLocaleDateString('tr-TR') : iso;
+      }
+
+      function fmtMoney(n) {
+        if (n == null || isNaN(n)) return '—';
+        return '₺' + Math.round(n).toLocaleString('tr-TR');
+      }
+
+      function fmtKm(n) {
+        if (n == null || isNaN(n) || n <= 0) return '—';
+        return n.toFixed(2).replace('.', ',') + ' km';
+      }
+
+      /** Tek kabul için tahmini kazanç: (min + max) / 2 */
+      function tripEarningMid(log) {
+        var emin = log.earning_min != null ? Number(log.earning_min) : (log.earningMin != null ? Number(log.earningMin) : 0);
+        var emax = log.earning_max != null ? Number(log.earning_max) : (log.earningMax != null ? Number(log.earningMax) : 0);
+        if (isNaN(emin)) emin = 0;
+        if (isNaN(emax)) emax = 0;
+        return (emin + emax) / 2;
+      }
+
+      function logEarning(log) {
+        return tripEarningMid(log);
+      }
+
+      /** Toplam tahmini kazanç = Σ (min+max)/2 sadece KABUL kayıtları */
+      function totalEarningsEstimate(acceptedLogs) {
+        var sum = 0;
+        acceptedLogs.forEach(function (l) { sum += tripEarningMid(l); });
+        return sum;
+      }
+
+      function isAccepted(log) {
+        var act = String(log.action || log.islem || '').toUpperCase();
+        if (act === 'KABUL') return true;
+        if (act === 'ATLANDI') return false;
+        if (log.accepted === true) return true;
+        var r = String(log.reason || '').toLowerCase();
+        return r === 'accepted';
+      }
+
+      function isRejected(log) {
+        return !isAccepted(log);
+      }
+
+      function logsForCode(code) {
+        var c = String(code || '').trim().toUpperCase();
+        return tripLogs.filter(function (l) {
+          return String(l.code || '').trim().toUpperCase() === c;
+        });
+      }
+
+      function weekLogsForCode(code) {
+        return logsForCode(code).filter(function (l) { return isThisWeek(parseLogDate(l)); });
+      }
+
+      function weekStats(code) {
+        var logs = weekLogsForCode(code);
+        var earnings = 0, accepts = 0, rejects = 0;
+        logs.forEach(function (l) {
+          if (isAccepted(l)) {
+            accepts++;
+            earnings += logEarning(l);
+          } else {
+            rejects++;
+          }
+        });
+        return { earnings: earnings, accepts: accepts, rejects: rejects };
+      }
+
+      function allStats(code) {
+        var logs = logsForCode(code);
+        var accepted = [];
+        var rejects = 0;
+        var kmSum = 0;
+        var kmCount = 0;
+        logs.forEach(function (l) {
+          if (isAccepted(l)) accepted.push(l);
+          else rejects++;
+          var km = Number(l.km) || 0;
+          if (km > 0) { kmSum += km; kmCount++; }
+        });
+        return {
+          earnings: totalEarningsEstimate(accepted),
+          accepts: accepted.length,
+          rejects: rejects,
+          avgKm: kmCount > 0 ? kmSum / kmCount : null
+        };
+      }
+
+      function globalWeekStats() {
+        var earnings = 0, accepts = 0, rejects = 0;
+        tripLogs.forEach(function (l) {
+          if (!isThisWeek(parseLogDate(l))) return;
+          if (isAccepted(l)) { accepts++; earnings += logEarning(l); }
+          else rejects++;
+        });
+        var activeCount = licenses.filter(function (lic) {
+          return licenseStatus(lic).key === 'active';
+        }).length;
+        return { earnings: earnings, accepts: accepts, rejects: rejects, activeCount: activeCount };
+      }
+
+      function actionLabel(log) {
+        if (isAccepted(log)) return { text: 'Kabul', cls: 'accept' };
+        var act = String(log.action || log.islem || '').toUpperCase();
+        if (act === 'ATLANDI') return { text: 'Atlandı', cls: 'reject' };
+        var r = String(log.reason || '').toLowerCase();
+        if (r === 'skipped') return { text: 'Red (km)', cls: 'reject' };
+        if (r === 'click_failed') return { text: 'Tıklama hatası', cls: 'reject' };
+        if (r === 'no_km') return { text: 'Km okunamadı', cls: 'reject' };
+        return { text: 'Red', cls: 'reject' };
+      }
+
+      function formatApiError(e, res, body) {
+        var msg = (e && e.message) ? e.message : String(e);
+        if (res) msg = 'HTTP ' + res.status + ': ' + (body && body.message ? body.message : res.statusText);
+        if (msg.indexOf('Failed to fetch') !== -1) {
+          msg += ' — CORS veya file://. python3 -m http.server 8765 kullanın';
+        }
+        return 'API Hatası: ' + msg;
+      }
+
+      async function fetchGitHubFile(url) {
+        var res = await fetch(url, { method: 'GET', headers: apiHeaders() });
+        var body = {};
+        try { body = await res.json(); } catch (_) {}
+        if (res.status === 404) return { missing: true };
+        if (!res.ok) throw new Error(formatApiError(null, res, body));
+        var jsonText = decodeBase64Utf8(body.content);
+        return { data: JSON.parse(jsonText), sha: body.sha, missing: false };
+      }
+
+      async function loadLicenses() {
+        var result = await fetchGitHubFile(LICENSES_URL);
+        if (result.missing) throw new Error('licenses.json bulunamadı');
+        currentSha = result.sha;
+        licenses = Array.isArray(result.data.licenses) ? result.data.licenses : [];
+        return licenses;
+      }
+
+      async function loadTripLogs() {
+        tripLogs = [];
+        try {
+          var url = SCRIPT_URL + '?action=logs&_=' + Date.now();
+          var res = await fetch(url);
+          var body = {};
+          try { body = await res.json(); } catch (_) {}
+          if (!body.success) {
+            console.warn('[OtoKabul Panel] Sheets logs:', body.error || res.status);
+            return;
+          }
+          tripLogs = Array.isArray(body.logs) ? body.logs : [];
+        } catch (e) {
+          console.warn('[OtoKabul Panel] Sheets logs fetch failed', e);
+          tripLogs = [];
+        }
+      }
+
+      async function saveLicenses(message) {
+        var jsonStr = JSON.stringify({ licenses: licenses }, null, 2) + '\n';
+        var res = await fetch(LICENSES_URL, {
+          method: 'PUT',
+          headers: apiHeaders(),
+          body: JSON.stringify({
+            message: message || 'Lisans güncellendi',
+            content: encodeBase64Utf8(jsonStr),
+            sha: currentSha
+          })
+        });
+        var body = {};
+        try { body = await res.json(); } catch (_) {}
+        if (!res.ok) throw new Error(formatApiError(null, res, body));
+        currentSha = body.content && body.content.sha ? body.content.sha : currentSha;
+      }
+
+      function updateSummaryCards() {
+        var gs = globalWeekStats();
+        $('statWeekEarnings').textContent = fmtMoney(gs.earnings);
+        $('statActiveDrivers').textContent = gs.activeCount;
+        $('statWeekAccepts').textContent = gs.accepts;
+        $('statWeekRejects').textContent = gs.rejects;
+
+        var info = $('logsInfo');
+        if (info) {
+          if (tripLogs.length === 0) {
+            info.textContent =
+              'Henüz trip log yok. Taksiciler teklif aldıkça Google Sheets → panel otomatik dolacak.';
+            info.classList.remove('hidden');
+          } else {
+            info.textContent =
+              '📊 ' + tripLogs.length + ' kayıt Google Sheets\'ten yüklendi.';
+            info.classList.remove('hidden');
+          }
+        }
+      }
+
+      function renderActionButtons(i, container) {
+        var lic = licenses[i];
+        if (!lic) return;
+        var hasNote = !!(lic.note && String(lic.note).trim());
+        var toggleBtn = lic.active
+          ? '<button type="button" class="btn btn-danger btn-sm" data-action="deactivate" data-index="' + i + '">Pasife Al</button>'
+          : '<button type="button" class="btn btn-success btn-sm" data-action="activate" data-index="' + i + '">Aktive Et</button>';
+        var resetBtn = !wasEverUsed(lic)
+          ? '<button type="button" class="btn btn-ghost btn-sm" data-action="reset-license" data-index="' + i + '">Sıfırla</button>'
+          : '';
+        container.innerHTML =
+          toggleBtn +
+          '<button type="button" class="btn btn-ghost btn-sm" data-action="copy" data-code="' + esc(lic.code) + '">Kopyala</button>' +
+          '<button type="button" class="btn btn-ghost btn-sm" data-action="note" data-index="' + i + '">' + (hasNote ? 'Not Düzenle' : 'Not Ekle') + '</button>' +
+          (hasNote ? '<button type="button" class="btn btn-danger btn-sm" data-action="delete-note" data-index="' + i + '">Notu Sil</button>' : '') +
+          resetBtn;
+        bindActions(container);
+      }
+
+      function renderList() {
+        updateSummaryCards();
+        var tableArea = $('tableArea');
+        if (!tableArea) return;
+
+        if (!licenses.length) {
+          tableArea.innerHTML = '<p class="loading">Henüz kod yok. Yeni kod üretin.</p>';
+          return;
+        }
+
+        var rows = licenses.map(function (lic, i) {
+          var st = licenseStatus(lic);
+          var left = daysLeft(lic.expires_at);
+          var ws = weekStats(lic.code);
+          var rowCls = 'data-row';
+          if (lic.expires_at && left === 0) rowCls += ' row-expired';
+          else if (left !== null && left > 0 && left < 5) rowCls += ' row-expiring';
+          var leftStr = left === null ? '—' : (left === 0 ? '0 gün' : left + ' gün');
+
+          return '<tr class="' + rowCls + '" data-row-index="' + i + '">' +
+            '<td class="mono">' + esc(lic.code) + '</td>' +
+            '<td>' + esc(lic.note || '—') + '</td>' +
+            '<td><span class="badge ' + st.cls + '">' + st.emoji + ' ' + st.label + '</span></td>' +
+            '<td>' + fmtDate(lic.activated_at) + '</td>' +
+            '<td>' + fmtDate(lic.expires_at) + '</td>' +
+            '<td class="num-cell">' + leftStr + '</td>' +
+            '<td class="num-cell">' + fmtMoney(ws.earnings) + '</td>' +
+            '<td class="num-cell">' + ws.accepts + '</td>' +
+            '<td><div class="actions" onclick="event.stopPropagation()">' +
+            (lic.active
+              ? '<button type="button" class="btn btn-danger btn-sm" data-action="deactivate" data-index="' + i + '">Pasif</button>'
+              : '<button type="button" class="btn btn-success btn-sm" data-action="activate" data-index="' + i + '">Aktif</button>') +
+            '<button type="button" class="btn btn-ghost btn-sm" data-action="copy" data-code="' + esc(lic.code) + '">📋</button>' +
+            '</div></td></tr>';
+        }).join('');
+
+        var mobCards = licenses.map(function (lic, i) {
+          var st = licenseStatus(lic);
+          var ws = weekStats(lic.code);
+          return '<div class="mob-card" data-row-index="' + i + '">' +
+            '<div class="mob-card-top">' +
+            '<span class="mono">' + esc(lic.code) + '</span>' +
+            '<span class="badge ' + st.cls + '">' + st.label + '</span></div>' +
+            '<div style="font-size:0.85rem;margin-bottom:6px">' + esc(lic.note || '—') + '</div>' +
+            '<div class="mob-card-meta">' +
+            '<span>💰 ' + fmtMoney(ws.earnings) + '</span>' +
+            '<span>✅ ' + ws.accepts + '</span>' +
+            '<span>Kalan: ' + (daysLeft(lic.expires_at) != null ? daysLeft(lic.expires_at) + ' gün' : '—') + '</span>' +
+            '</div></div>';
+        }).join('');
+
+        tableArea.innerHTML =
+          '<div class="desktop-table table-wrap"><table>' +
+          '<thead><tr>' +
+          '<th>Kod</th><th>Not</th><th>Durum</th><th>Aktivasyon</th>' +
+          '<th>Bitiş</th><th>Kalan</th><th>Bu hafta kazanç</th><th>Bu hafta kabul</th><th>İşlemler</th>' +
+          '</tr></thead><tbody>' + rows + '</tbody></table></div>' +
+          '<div class="mobile-cards">' + mobCards + '</div>';
+
+        tableArea.querySelectorAll('[data-row-index]').forEach(function (el) {
+          el.addEventListener('click', function (e) {
+            if (e.target.closest('[data-action]')) return;
+            var idx = parseInt(el.getAttribute('data-row-index'), 10);
+            showDetail(idx);
+          });
+        });
+        bindActions(tableArea);
+      }
+
+      function last7DaysAcceptCounts(code) {
+        var labels = [];
+        var counts = [];
+        var now = new Date();
+        for (var i = 6; i >= 0; i--) {
+          var d = new Date(now);
+          d.setDate(d.getDate() - i);
+          d.setHours(0, 0, 0, 0);
+          var next = new Date(d);
+          next.setDate(next.getDate() + 1);
+          labels.push(d.toLocaleDateString('tr-TR', { weekday: 'short', day: 'numeric' }));
+          var count = logsForCode(code).filter(function (l) {
+            var ld = parseLogDate(l);
+            return ld && ld >= d && ld < next && isAccepted(l);
+          }).length;
+          counts.push(count);
+        }
+        return { labels: labels, counts: counts };
+      }
+
+      function renderChart(code) {
+        var canvas = $('acceptChart');
+        if (!canvas || typeof Chart === 'undefined') return;
+        if (chartInstance) { chartInstance.destroy(); chartInstance = null; }
+        var data = last7DaysAcceptCounts(code);
+        chartInstance = new Chart(canvas, {
+          type: 'bar',
+          data: {
+            labels: data.labels,
+            datasets: [{
+              label: 'Kabul',
+              data: data.counts,
+              backgroundColor: 'rgba(16, 185, 129, 0.7)',
+              borderColor: '#10b981',
+              borderWidth: 1,
+              borderRadius: 6
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+              x: {
+                grid: { color: 'rgba(148,163,184,0.08)' },
+                ticks: { color: '#94a3b8', font: { size: 11 } }
+              },
+              y: {
+                beginAtZero: true,
+                ticks: { stepSize: 1, color: '#94a3b8', font: { size: 11 } },
+                grid: { color: 'rgba(148,163,184,0.08)' }
+              }
+            }
+          }
+        });
+      }
+
+      function showDetail(index) {
+        detailIndex = index;
+        var lic = licenses[index];
+        if (!lic) return;
+
+        var st = licenseStatus(lic);
+        var stats = allStats(lic.code);
+        var logs = logsForCode(lic.code).slice().sort(function (a, b) {
+          var da = parseLogDate(a), db = parseLogDate(b);
+          if (!da && !db) return 0;
+          if (!da) return 1;
+          if (!db) return -1;
+          return db - da;
+        });
+
+        $('detailTitle').textContent = lic.note && lic.note.trim() ? lic.note.trim() : lic.code;
+        $('detailCode').textContent = lic.code;
+        $('detailEarnings').textContent = fmtMoney(stats.earnings);
+        $('detailAccepts').textContent = stats.accepts;
+        $('detailRejects').textContent = stats.rejects;
+        $('detailAvgKm').textContent = stats.avgKm != null ? fmtKm(stats.avgKm) : '—';
+        var midPerAccept = stats.accepts > 0 ? stats.earnings / stats.accepts : 0;
+        $('detailStatus').textContent =
+          st.emoji + ' ' + st.label + ' · Bitiş: ' + fmtDate(lic.expires_at) +
+          (stats.accepts > 0
+            ? ' · Kazanç ≈ (min+max)/2 × ' + stats.accepts + ' kabul (ort. ' + fmtMoney(midPerAccept) + '/kabul)'
+            : '');
+
+        var logTable = $('detailLogTable');
+        var logEmpty = $('detailLogEmpty');
+        if (!logs.length) {
+          logTable.innerHTML = '';
+          logEmpty.classList.remove('hidden');
+        } else {
+          logEmpty.classList.add('hidden');
+          var logRows = logs.map(function (l) {
+            var dateStr = l.date ? String(l.date) : '—';
+            var timeStr = l.time ? String(l.time) : '—';
+            if (dateStr === '—' || timeStr === '—') {
+              var d = parseLogDate(l);
+              if (dateStr === '—' && d) dateStr = d.toLocaleDateString('tr-TR');
+              if (timeStr === '—' && d) timeStr = d.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            }
+            var act = actionLabel(l);
+            var emin = l.earning_min != null ? l.earning_min : l.earningMin;
+            var emax = l.earning_max != null ? l.earning_max : l.earningMax;
+            return '<tr>' +
+              '<td>' + dateStr + '</td>' +
+              '<td>' + timeStr + '</td>' +
+              '<td class="num-cell">' + fmtKm(Number(l.km) || 0) + '</td>' +
+              '<td class="num-cell">' + (emin != null ? '₺' + emin : '—') + '</td>' +
+              '<td class="num-cell">' + (emax != null ? '₺' + emax : '—') + '</td>' +
+              '<td><span class="action-tag ' + act.cls + '">' + act.text + '</span></td></tr>';
+          }).join('');
+          logTable.innerHTML =
+            '<div class="table-wrap"><table><thead><tr>' +
+            '<th>Tarih</th><th>Saat</th><th>Km</th><th>Min Kazanç</th><th>Max Kazanç</th><th>İşlem</th>' +
+            '</tr></thead><tbody>' + logRows + '</tbody></table></div>';
+        }
+
+        renderActionButtons(index, $('detailActions'));
+        renderChart(lic.code);
+
+        $('listScreen').classList.add('hidden');
+        $('detailScreen').classList.remove('hidden');
+      }
+
+      function showList() {
+        detailIndex = null;
+        if (chartInstance) { chartInstance.destroy(); chartInstance = null; }
+        $('detailScreen').classList.add('hidden');
+        $('listScreen').classList.remove('hidden');
+        renderList();
+      }
+
+      function bindActions(root) {
+        if (!root) return;
+        root.querySelectorAll('[data-action]').forEach(function (btn) {
+          btn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            var action = btn.getAttribute('data-action');
+            var index = parseInt(btn.getAttribute('data-index'), 10);
+            var code = btn.getAttribute('data-code');
+            if (action === 'activate') toggleActive(index, true);
+            else if (action === 'deactivate') toggleActive(index, false);
+            else if (action === 'copy' && code) copyCode(code);
+            else if (action === 'note') openNoteModal(index);
+            else if (action === 'delete-note') deleteNote(index);
+            else if (action === 'reset-license') resetLicense(index);
+          });
+        });
+      }
+
+      async function loadAndRender() {
+        var tableArea = $('tableArea');
+        try {
+          showGlobalError(null);
+          if (tableArea) tableArea.innerHTML = '<p class="loading">Yükleniyor…</p>';
+          await loadLicenses();
+          await loadTripLogs();
+          showList();
+        } catch (e) {
+          var errMsg = e.message || String(e);
+          showGlobalError(errMsg);
+          if (tableArea) tableArea.innerHTML = '<p class="err">' + esc(errMsg) + '</p>';
+        }
+      }
+
+      async function toggleActive(index, active) {
+        try {
+          licenses[index].active = active;
+          await saveLicenses(licenses[index].code + ' active=' + active);
+          toast(active ? 'Aktive edildi' : 'Pasife alındı');
+          if (detailIndex === index) showDetail(index);
+          else renderList();
+        } catch (e) {
+          toast('Kayıt hatası');
+          showGlobalError(e.message || String(e));
+          await loadAndRender();
+        }
+      }
+
+      async function copyCode(code) {
+        try {
+          await navigator.clipboard.writeText(code);
+          toast('Kopyalandı: ' + code);
+        } catch (_) { toast('Kopyalanamadı'); }
+      }
+
+      async function resetLicense(index) {
+        var lic = licenses[index];
+        if (!lic || wasEverUsed(lic)) {
+          toast('Tek seferlik kod — sıfırlanamaz');
+          return;
+        }
+        if (!confirm('"' + lic.code + '" temizlensin mi?')) return;
+        try {
+          lic.device_id = '';
+          lic.activated_at = '';
+          lic.expires_at = '';
+          await saveLicenses('Kod temizlendi: ' + lic.code);
+          toast('Kod bekliyor durumuna alındı');
+          if (detailIndex === index) showDetail(index);
+          else renderList();
+        } catch (e) {
+          showGlobalError(e.message || String(e));
+          await loadAndRender();
+        }
+      }
+
+      async function deleteNote(index) {
+        var lic = licenses[index];
+        if (!lic || !lic.note) return;
+        if (!confirm('Not silinsin mi?')) return;
+        try {
+          licenses[index].note = '';
+          await saveLicenses('Not silindi: ' + lic.code);
+          toast('Not silindi');
+          if (detailIndex === index) showDetail(index);
+          else renderList();
+        } catch (e) {
+          showGlobalError(e.message || String(e));
+          await loadAndRender();
+        }
+      }
+
+      function openNoteModal(index) {
+        noteEditIndex = index;
+        var lic = licenses[index];
+        var backdrop = document.createElement('div');
+        backdrop.className = 'modal-backdrop';
+        var hasNote = !!(lic.note && lic.note.trim());
+        backdrop.innerHTML =
+          '<div class="modal"><h3>Not — ' + esc(lic.code) + '</h3>' +
+          '<label>Taksici adı / telefon</label>' +
+          '<textarea id="noteInput">' + esc(lic.note || '') + '</textarea>' +
+          '<div class="modal-actions">' +
+          (hasNote ? '<button type="button" class="btn btn-danger" id="noteDelete">Notu Sil</button>' : '') +
+          '<button type="button" class="btn btn-ghost" id="noteCancel">İptal</button>' +
+          '<button type="button" class="btn btn-primary" id="noteSave">Kaydet</button></div></div>';
+        document.body.appendChild(backdrop);
+        backdrop.querySelector('#noteCancel').onclick = function () { backdrop.remove(); };
+        var del = backdrop.querySelector('#noteDelete');
+        if (del) {
+          del.onclick = async function () {
+            if (!confirm('Not silinsin mi?')) return;
+            licenses[noteEditIndex].note = '';
+            backdrop.remove();
+            await saveLicenses('Not silindi: ' + licenses[noteEditIndex].code);
+            toast('Not silindi');
+            if (detailIndex === noteEditIndex) showDetail(noteEditIndex);
+            else renderList();
+          };
+        }
+        backdrop.querySelector('#noteSave').onclick = async function () {
+          licenses[noteEditIndex].note = backdrop.querySelector('#noteInput').value.trim();
+          backdrop.remove();
+          await saveLicenses('Not: ' + licenses[noteEditIndex].code);
+          toast('Not kaydedildi');
+          if (detailIndex === noteEditIndex) showDetail(noteEditIndex);
+          else renderList();
+        };
+        backdrop.addEventListener('click', function (e) { if (e.target === backdrop) backdrop.remove(); });
+      }
+
+      function showMain() {
+        var login = $('loginScreen');
+        var list = $('listScreen');
+        if (login) login.classList.add('hidden');
+        if (list) list.classList.remove('hidden');
+      }
+
+      function showLogin() {
+        var list = $('listScreen');
+        var detail = $('detailScreen');
+        var login = $('loginScreen');
+        if (list) list.classList.add('hidden');
+        if (detail) detail.classList.add('hidden');
+        if (login) login.classList.remove('hidden');
+        showGlobalError(null);
+        var input = $('tokenInput');
+        if (input) input.value = '';
+      }
+
+      function bindEvents() {
+        var loginBtn = $('loginBtn');
+        var logoutBtn = $('logoutBtn');
+        var refreshBtn = $('refreshBtn');
+        var backBtn = $('backBtn');
+        var addCodeBtn = $('addCodeBtn');
+        if (!loginBtn || !logoutBtn || !refreshBtn || !backBtn || !addCodeBtn) {
+          console.error('[OtoKabul Panel] UI elementleri bulunamadı');
+          return;
+        }
+
+        loginBtn.addEventListener('click', async function () {
+          var t = ($('tokenInput').value || '').trim();
+          if (!t) {
+            $('loginErr').textContent = 'Token gerekli';
+            $('loginErr').classList.remove('hidden');
+            return;
+          }
+          $('loginErr').classList.add('hidden');
+          $('loginBtn').disabled = true;
+          try {
+            setToken(t);
+            await loadAndRender();
+            showMain();
+          } catch (e) {
+            clearToken();
+            showLogin();
+            $('loginErr').textContent = e.message || String(e);
+            $('loginErr').classList.remove('hidden');
+          } finally {
+            $('loginBtn').disabled = false;
+          }
+        });
+
+        logoutBtn.addEventListener('click', function () { clearToken(); showLogin(); });
+        refreshBtn.addEventListener('click', function () { loadAndRender(); });
+        backBtn.addEventListener('click', function () { showList(); });
+
+        addCodeBtn.addEventListener('click', async function () {
+          try {
+            var existing = {};
+            licenses.forEach(function (l) { existing[l.code] = true; });
+            var code;
+            do { code = generateCode(); } while (existing[code]);
+            licenses.unshift({
+              code: code, device_id: '', activated_at: '', expires_at: '',
+              active: true, note: ''
+            });
+            await saveLicenses('Yeni kod: ' + code);
+            toast('Eklendi: ' + code);
+            renderList();
+          } catch (e) {
+            showGlobalError(e.message || String(e));
+            await loadAndRender();
+          }
+        });
+      }
+
+      async function init() {
+        if (window.location.protocol === 'file:') {
+          showLogin();
+          var loginErr = $('loginErr');
+          if (loginErr) {
+            loginErr.textContent = 'Dosyayı çift tıklamayın — localhost sunucusu gerekli (yukarıdaki uyarıya bakın).';
+            loginErr.classList.remove('hidden');
+          }
+          return;
+        }
+        bindEvents();
+        showLogin();
+        try {
+          if (getToken()) {
+            await loadAndRender();
+            showMain();
+          }
+        } catch (e) {
+          console.error('[OtoKabul Panel] init hata', e);
+          showLogin();
+          var errEl = $('loginErr');
+          if (errEl) {
+            errEl.textContent = 'Panel başlatılamadı: ' + (e.message || String(e));
+            errEl.classList.remove('hidden');
+          }
+        }
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+      } else {
+        init();
+      }
+    })();
+  </script>
+</body>
+</html>

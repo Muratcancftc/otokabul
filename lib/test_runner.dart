@@ -46,6 +46,10 @@ class _TestRunnerScreenState extends State<TestRunnerScreen> {
     _TestItem(id: 8, title: 'TEST 8: Wake Lock izni'),
     _TestItem(id: 9, title: 'TEST 9: BiTaksi kurulu mu?'),
     _TestItem(id: 10, title: 'TEST 10: Çift basma koruması'),
+    _TestItem(
+      id: 11,
+      title: 'TEST 11: Lisans uzaktan iptal kontrolü',
+    ),
   ];
 
   bool _isRunning = false;
@@ -80,6 +84,7 @@ class _TestRunnerScreenState extends State<TestRunnerScreen> {
     await _runTest(7, _test8WakeLock);
     await _runTest(8, _test9Bitaksi);
     await _runTest(9, _test10DoubleTap);
+    await _runTest(10, _test11LicenseRemote);
 
     if (!mounted) return;
     final passed = _tests.where((t) => t.status == _TestStatus.passed).length;
@@ -313,6 +318,38 @@ class _TestRunnerScreenState extends State<TestRunnerScreen> {
       }
     } catch (e) {
       _fail(9, '❌ HATA: $e');
+    }
+  }
+
+  Future<void> _test11LicenseRemote() async {
+    try {
+      final raw = await _testChannel.invokeMethod<Map<dynamic, dynamic>>(
+        'testLicenseRemoteRevoke',
+      );
+      final map = raw ?? {};
+      final code = map['code']?.toString() ?? '';
+      final active = map['active'] == true;
+      final status = map['status']?.toString() ?? '';
+      final message = map['message']?.toString() ?? '';
+      final allOk = map['allPass'] == true;
+
+      final lines = <String>[
+        if (code.isEmpty) 'Yerel kod yok — önce aktivasyon yapın' else 'Kod: $code',
+        'GitHub active: ${active ? 'true' : 'false'}',
+        'Durum: $status',
+        message,
+      ];
+
+      final detail = lines.join('\n');
+      if (code.isEmpty) {
+        _warn(10, detail);
+      } else if (allOk) {
+        _pass(10, detail);
+      } else {
+        _fail(10, detail);
+      }
+    } catch (e) {
+      _fail(10, '❌ HATA: $e');
     }
   }
 
